@@ -1,4 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import { NavLink } from "react-router-dom";
 import {
   CheckCircle,
@@ -12,18 +19,314 @@ import {
   Dumbbell,
   MapPin,
   Clock3,
+  Sparkles,
+  Wallet,
+  CreditCard,
+  BadgeCheck,
 } from "lucide-react";
-import { PACKAGES, ROUTE_PATHS, WHATSAPP_URL, WHATSAPP_URL_AR } from "@/lib/index";
+import { addDoc, collection, doc, onSnapshot } from "firebase/firestore";
+import { ROUTE_PATHS } from "@/lib/index";
+import { db } from "@/lib/firebase";
 
 type Step = "package" | "details" | "payment" | "confirm";
-type Lang = "ar" | "en";
+type Lang = "ar" | "en" | "de";
 type ThemeMode = "dark" | "light";
 
-const PAYMENT_METHODS = [
-  { id: "instapay", name: "InstaPay", nameAr: "إنستاباي", flag: "🇪🇬", region: "Egypt", color: "#10b981" },
-  { id: "vodafone", name: "Vodafone Cash", nameAr: "فودافون كاش", flag: "🇪🇬", region: "Egypt", color: "#DC2626" },
-  { id: "stripe", name: "Stripe", nameAr: "سترايب", flag: "🌍", region: "International", color: "#6366f1" },
-  { id: "paypal", name: "PayPal", nameAr: "باي بال", flag: "🌍", region: "International", color: "#0070ba" },
+type BookingPackage = {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  nameDe: string;
+  price: number;
+  oldPrice?: number | null;
+  currency?: string;
+  priceNoteAr?: string;
+  priceNoteEn?: string;
+  priceNoteDe?: string;
+  featuresAr?: string[];
+  featuresEn?: string[];
+  featuresDe?: string[];
+  badgeAr?: string;
+  badgeEn?: string;
+  badgeDe?: string;
+  isPopular?: boolean;
+  sortOrder?: number;
+  isActive?: boolean;
+};
+
+type PaymentMethodItem = {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  nameDe: string;
+  regionAr?: string;
+  regionEn?: string;
+  regionDe?: string;
+  flag?: string;
+  color?: string;
+  value?: string;
+  link?: string;
+  noteAr?: string;
+  noteEn?: string;
+  noteDe?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+};
+
+type BookingContent = {
+  heroBadgeAr: string;
+  heroBadgeEn: string;
+  heroBadgeDe: string;
+
+  heroTitle1Ar: string;
+  heroTitle1En: string;
+  heroTitle1De: string;
+
+  heroTitle2Ar: string;
+  heroTitle2En: string;
+  heroTitle2De: string;
+
+  heroTextAr: string;
+  heroTextEn: string;
+  heroTextDe: string;
+
+  footerTextAr: string;
+  footerTextEn: string;
+  footerTextDe: string;
+
+  successTitleAr: string;
+  successTitleEn: string;
+  successTitleDe: string;
+
+  successTextAr: string;
+  successTextEn: string;
+  successTextDe: string;
+};
+
+type SiteSettings = {
+  whatsappNumber: string;
+  whatsappMessageAr: string;
+  facebookLink: string;
+  instagramLink: string;
+  tiktokLink: string;
+  developerName: string;
+  developerPhone: string;
+  developerWhatsAppMessage: string;
+};
+
+const defaultBookingContent: BookingContent = {
+  heroBadgeAr: "احجز الآن",
+  heroBadgeEn: "Book Now",
+  heroBadgeDe: "Jetzt buchen",
+
+  heroTitle1Ar: "احجز",
+  heroTitle1En: "Claim Your",
+  heroTitle1De: "Starte deine",
+
+  heroTitle2Ar: "رحلتك الاحترافية",
+  heroTitle2En: "Premium Journey",
+  heroTitle2De: "Premium-Reise",
+
+  heroTextAr:
+    "اختار الباقة المناسبة، أكمل بياناتك، وحدد وسيلة الدفع في تجربة واضحة وفخمة.",
+  heroTextEn:
+    "Choose your package, complete your details, and select your payment method in a clear premium experience.",
+  heroTextDe:
+    "Wähle dein Paket, ergänze deine Daten und bestimme deine Zahlungsmethode in einem klaren Premium-Erlebnis.",
+
+  footerTextAr: "جميع الحجوزات والاستفسارات تتم مباشرة عبر واتساب.",
+  footerTextEn: "All bookings and inquiries are handled directly through WhatsApp.",
+  footerTextDe: "Alle Buchungen und Anfragen werden direkt über WhatsApp abgewickelt.",
+
+  successTitleAr: "تم استلام طلبك!",
+  successTitleEn: "Booking Received!",
+  successTitleDe: "Deine Buchung wurde erhalten!",
+
+  successTextAr: "فريق د. أشرف سيتواصل معك قريبًا لتأكيد الحجز.",
+  successTextEn: "Dr. Ashraf's team will contact you shortly to confirm your booking.",
+  successTextDe: "Das Team von Dr. Ashraf wird dich in Kürze kontaktieren, um deine Buchung zu bestätigen.",
+};
+
+const defaultSiteSettings: SiteSettings = {
+  whatsappNumber: "201027570204",
+  whatsappMessageAr: "مرحبا، أريد الاستفسار عن البرامج التدريبية والحجز",
+  facebookLink: "https://www.facebook.com/share/1DTjxnAxVL/?mibextid=wwXIfr",
+  instagramLink:
+    "https://www.instagram.com/dr.ashraf_el_abd?igsh=c2tpamFreXFuaGI%3D&utm_source=qr",
+  tiktokLink: "https://www.tiktok.com/@dr..ashraf.el.abd?_r=1&_t=ZS-95g5Q6SZ8zp",
+  developerName: "المهندس عمرو خالد",
+  developerPhone: "201008454029",
+  developerWhatsAppMessage: "مرحبًا، أريد الاستفسار بخصوص تطوير الموقع",
+};
+
+const fallbackPackages: BookingPackage[] = [
+  {
+    id: "basic",
+    nameAr: "BASIC",
+    nameEn: "BASIC",
+    nameDe: "BASIC",
+    price: 1200,
+    currency: "EGP",
+    priceNoteAr: "/شهر",
+    priceNoteEn: "/month",
+    priceNoteDe: "/Monat",
+    featuresAr: [
+      "خطة تغذية مخصصة",
+      "برنامج تمارين أسبوعي",
+      "متابعة واتساب مرتين أسبوعيًا",
+      "متابعة التقدم",
+    ],
+    featuresEn: [
+      "Custom nutrition plan",
+      "Weekly workout program",
+      "WhatsApp check-ins twice weekly",
+      "Progress tracking",
+    ],
+    featuresDe: [
+      "Individueller Ernährungsplan",
+      "Wöchentliches Trainingsprogramm",
+      "WhatsApp-Betreuung zweimal pro Woche",
+      "Fortschrittskontrolle",
+    ],
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "pro",
+    nameAr: "PRO",
+    nameEn: "PRO",
+    nameDe: "PRO",
+    price: 2800,
+    currency: "EGP",
+    priceNoteAr: "/شهر",
+    priceNoteEn: "/month",
+    priceNoteDe: "/Monat",
+    badgeAr: "الأكثر طلبًا",
+    badgeEn: "Most Popular",
+    badgeDe: "Am beliebtesten",
+    isPopular: true,
+    featuresAr: [
+      "كل مميزات الأساسي",
+      "دعم واتساب يومي",
+      "تغذية راجعة فيديو أسبوعية",
+      "مكالمات فيديو شهرية",
+    ],
+    featuresEn: [
+      "Everything in Basic",
+      "Daily WhatsApp support",
+      "Weekly video feedback",
+      "Monthly video calls",
+    ],
+    featuresDe: [
+      "Alles aus Basic",
+      "Täglicher WhatsApp-Support",
+      "Wöchentliches Video-Feedback",
+      "Monatliche Video-Calls",
+    ],
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "vip",
+    nameAr: "VIP ELITE",
+    nameEn: "VIP ELITE",
+    nameDe: "VIP ELITE",
+    price: 5500,
+    currency: "EGP",
+    priceNoteAr: "/شهر",
+    priceNoteEn: "/month",
+    priceNoteDe: "/Monat",
+    featuresAr: [
+      "كل مميزات البرو",
+      "وصول مباشر 24/7",
+      "مكالمات فيديو كل أسبوعين",
+      "أولوية في الرد",
+    ],
+    featuresEn: [
+      "Everything in PRO",
+      "24/7 direct access",
+      "Bi-weekly video calls",
+      "Priority response",
+    ],
+    featuresDe: [
+      "Alles aus PRO",
+      "24/7 Direktzugang",
+      "Videoanrufe alle zwei Wochen",
+      "Priorisierte Antwort",
+    ],
+    sortOrder: 3,
+    isActive: true,
+  },
+];
+
+const fallbackPaymentMethods: PaymentMethodItem[] = [
+  {
+    id: "instapay",
+    nameAr: "إنستاباي",
+    nameEn: "InstaPay",
+    nameDe: "InstaPay",
+    regionAr: "مصر",
+    regionEn: "Egypt",
+    regionDe: "Ägypten",
+    flag: "🇪🇬",
+    color: "#10b981",
+    value: "ashraf.elabd570204@instapay",
+    link: "https://ipn.eg/S/ashraf.elabd570204/instapay/2ybBGM",
+    noteAr: "بعد التحويل ابعت لقطة شاشة التأكيد على واتساب.",
+    noteEn: "After payment, send the confirmation screenshot on WhatsApp.",
+    noteDe: "Sende nach der Zahlung den Zahlungsnachweis per WhatsApp.",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "vodafone",
+    nameAr: "فودافون كاش",
+    nameEn: "Vodafone Cash",
+    nameDe: "Vodafone Cash",
+    regionAr: "مصر",
+    regionEn: "Egypt",
+    regionDe: "Ägypten",
+    flag: "🇪🇬",
+    color: "#DC2626",
+    value: "+20 10 27570204",
+    noteAr: "حوّل على الرقم ثم أرسل لقطة التأكيد.",
+    noteEn: "Transfer to the number then send the confirmation screenshot.",
+    noteDe: "Überweise an die Nummer und sende dann den Nachweis.",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "stripe",
+    nameAr: "سترايب",
+    nameEn: "Stripe",
+    nameDe: "Stripe",
+    regionAr: "دولي",
+    regionEn: "International",
+    regionDe: "International",
+    flag: "🌍",
+    color: "#6366f1",
+    noteAr: "سيتم إرسال رابط Stripe عبر واتساب بعد الحجز.",
+    noteEn: "A Stripe link will be sent via WhatsApp after booking.",
+    noteDe: "Ein Stripe-Link wird nach der Buchung per WhatsApp gesendet.",
+    sortOrder: 3,
+    isActive: true,
+  },
+  {
+    id: "paypal",
+    nameAr: "باي بال",
+    nameEn: "PayPal",
+    nameDe: "PayPal",
+    regionAr: "دولي",
+    regionEn: "International",
+    regionDe: "International",
+    flag: "🌍",
+    color: "#0070ba",
+    noteAr: "سيتم إرسال رابط PayPal عبر واتساب بعد الحجز.",
+    noteEn: "A PayPal link will be sent via WhatsApp after booking.",
+    noteDe: "Ein PayPal-Link wird nach der Buchung per WhatsApp gesendet.",
+    sortOrder: 4,
+    isActive: true,
+  },
 ];
 
 function FacebookIcon({ size = 18 }: { size?: number }) {
@@ -120,7 +423,7 @@ function SocialLinkCard({
 
   return (
     <a
-      href={href}
+      href={href || "#"}
       target="_blank"
       rel="noopener noreferrer"
       onMouseEnter={() => setHovered(true)}
@@ -168,9 +471,30 @@ function SocialLinkCard({
   );
 }
 
+function getLocalizedText(
+  lang: Lang,
+  ar?: string,
+  en?: string,
+  de?: string,
+  fallback = ""
+) {
+  if (lang === "ar") return ar || fallback;
+  if (lang === "en") return en || fallback;
+  return de || en || fallback;
+}
+
+function formatPrice(price: number, currency = "EGP") {
+  return `${price.toLocaleString()} ${currency}`;
+}
+
 export default function Booking() {
-  const [selectedPackage, setSelectedPackage] = useState<string>("pro");
-  const [selectedPayment, setSelectedPayment] = useState<string>("instapay");
+  const [packagesData, setPackagesData] = useState<BookingPackage[]>([]);
+  const [paymentMethodsData, setPaymentMethodsData] = useState<PaymentMethodItem[]>([]);
+  const [bookingContent, setBookingContent] = useState<BookingContent>(defaultBookingContent);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+
+  const [selectedPackage, setSelectedPackage] = useState<string>("");
+  const [selectedPayment, setSelectedPayment] = useState<string>("");
   const [step, setStep] = useState<Step>("package");
   const [lang, setLang] = useState<Lang>("ar");
   const [theme, setTheme] = useState<ThemeMode>("dark");
@@ -183,9 +507,107 @@ export default function Booking() {
     experience: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const isAr = lang === "ar";
+  const isEn = lang === "en";
   const isDark = theme === "dark";
+
+  const packageList = useMemo(() => {
+    const items = packagesData
+      .filter((item) => item.isActive !== false)
+      .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+    return items.length ? items : fallbackPackages;
+  }, [packagesData]);
+
+  const paymentList = useMemo(() => {
+    const items = paymentMethodsData
+      .filter((item) => item.isActive !== false)
+      .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+    return items.length ? items : fallbackPaymentMethods;
+  }, [paymentMethodsData]);
+
+  useEffect(() => {
+    const unsubBookingContent = onSnapshot(
+      doc(db, "siteContent", "booking"),
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+        setBookingContent({
+          ...defaultBookingContent,
+          ...(snapshot.data() as Partial<BookingContent>),
+        });
+      },
+      () => {}
+    );
+
+    const unsubSettings = onSnapshot(
+      doc(db, "siteContent", "settings"),
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+        setSiteSettings({
+          ...defaultSiteSettings,
+          ...(snapshot.data() as Partial<SiteSettings>),
+        });
+      },
+      () => {}
+    );
+
+    const unsubPackages = onSnapshot(
+      collection(db, "bookingPackages"),
+      (snapshot) => {
+        const data = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<BookingPackage, "id">),
+        }));
+        setPackagesData(data);
+      },
+      () => {}
+    );
+
+    const unsubPaymentMethods = onSnapshot(
+      collection(db, "paymentMethods"),
+      (snapshot) => {
+        const data = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<PaymentMethodItem, "id">),
+        }));
+        setPaymentMethodsData(data);
+      },
+      () => {}
+    );
+
+    return () => {
+      unsubBookingContent();
+      unsubSettings();
+      unsubPackages();
+      unsubPaymentMethods();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPackage && packageList.length) {
+      setSelectedPackage(packageList[0].id);
+    }
+  }, [packageList, selectedPackage]);
+
+  useEffect(() => {
+    if (!selectedPayment && paymentList.length) {
+      setSelectedPayment(paymentList[0].id);
+    }
+  }, [paymentList, selectedPayment]);
+
+  const selectedPkg =
+    packageList.find((p) => p.id === selectedPackage) ?? packageList[0];
+  const selectedPaymentMethod =
+    paymentList.find((p) => p.id === selectedPayment) ?? paymentList[0];
+
+  const stepOrder: Step[] = ["package", "details", "payment", "confirm"];
+  const stepIdx = stepOrder.indexOf(step);
+
+  const HOME_PATH = ROUTE_PATHS?.HOME ?? "/";
+  const ABOUT_PATH = ROUTE_PATHS?.ABOUT ?? "/about";
+  const CLASSES_PATH = ROUTE_PATHS?.CLASSES ?? "/classes";
+  const BOOKING_PATH = ROUTE_PATHS?.BOOKING ?? "/booking";
 
   const colors = useMemo(
     () => ({
@@ -211,119 +633,189 @@ export default function Booking() {
       heroButton: "linear-gradient(135deg, #d4a63f, #f0ca6b)",
       whatsappGlow: "0 12px 38px rgba(37, 211, 102, 0.28)",
       heroPanel: isDark ? "rgba(13,17,25,0.76)" : "rgba(255,255,255,0.87)",
-      red: "#DC2626",
-      green: "#22c55e",
+      success: "#22c55e",
     }),
     [isDark]
   );
 
-  const t = useMemo(
-    () => ({
-      brand: isAr ? "د. أشرف العبد" : "Dr. Ashraf El Abd",
-      brandSub: "ONLINE COACH • ELITE TRANSFORMATION",
-      home: isAr ? "الرئيسية" : "Home",
-      about: isAr ? "نبذة عنا" : "About",
-      services: isAr ? "الخدمات" : "Services",
-      booking: isAr ? "الحجز" : "Booking",
-      contact: isAr ? "تواصل" : "Contact",
-      langBadge: isAr ? "E" : "ع",
-      pageBadge: isAr ? "احجز الآن" : "Book Now",
-      heroTitle1: isAr ? "احجز" : "Claim Your",
-      heroTitle2: isAr ? "رحلتك للتحول" : "Transformation",
-      heroText: isAr ? "احجز مكانك دلوقتي · الأماكن محدودة" : "Reserve your spot now · Limited seats available",
-      choosePackage: isAr ? "اختار باقتك" : "Choose Your Package",
-      yourDetails: isAr ? "بياناتك" : "Your Details",
-      choosePayment: isAr ? "اختار الدفع" : "Choose Payment",
-      confirmOrder: isAr ? "تأكيد طلبك" : "Confirm Your Order",
-      packageStep: isAr ? "الباقة" : "Package",
-      detailsStep: isAr ? "البيانات" : "Details",
-      paymentStep: isAr ? "الدفع" : "Payment",
-      confirmStep: isAr ? "التأكيد" : "Confirm",
-      continue: isAr ? "استمرار" : "Continue",
-      continuePayment: isAr ? "المتابعة للدفع" : "Continue to Payment",
-      reviewConfirm: isAr ? "مراجعة وتأكيد" : "Review & Confirm",
-      confirmStart: isAr ? "تأكيد وابدأ" : "Confirm & Start",
-      back: isAr ? "رجوع" : "Back",
-      fullName: isAr ? "الاسم الكامل" : "Full Name",
-      email: isAr ? "البريد الإلكتروني" : "Email",
-      phone: isAr ? "رقم الواتساب" : "WhatsApp Number",
-      country: isAr ? "البلد" : "Country",
-      goal: isAr ? "هدفك" : "Your Goal",
-      experience: isAr ? "مستوى الخبرة" : "Experience Level",
-      selectGoal: isAr ? "اختار هدفك" : "Select your goal",
-      selectLevel: isAr ? "اختار المستوى" : "Select level",
-      paymentInstructions: isAr ? "تعليمات الدفع" : "Payment Instructions",
-      packageSummary: isAr ? "الباقة المختارة" : "Selected Package",
-      price: isAr ? "السعر" : "Price",
-      name: isAr ? "الاسم" : "Name",
-      payment: isAr ? "الدفع" : "Payment",
-      satisfaction: isAr ? "ضمان رضا كامل" : "100% Satisfaction Guarantee",
-      satisfactionText: isAr
-        ? "إذا التزمت بالخطة ولم ترَ نتائج خلال 30 يومًا، نعيد التخطيط أو نوفر الحل المناسب."
-        : "If you follow the plan and don't see results in 30 days, we'll refund or re-plan at no cost.",
-      successTitle: isAr ? "تم استلام طلبك!" : "Booking Received!",
-      successSub: isAr ? "أهلاً بيك" : "Welcome",
-      successList: isAr
-        ? [
-            "فريق د. أشرف سيتواصل معك خلال ساعتين",
-            "أكمل الدفع وأرسل لقطة التأكيد",
-            "رحلة التغيير بدأت الآن",
-          ]
-        : [
-            "Dr. Ashraf's team will contact you within 2 hours",
-            "Please complete your payment and send confirmation screenshot",
-            "Your transformation starts NOW",
-          ],
-      contactWhatsApp: isAr ? "تواصل عبر واتساب" : "Contact via WhatsApp",
-      returnHome: isAr ? "العودة للرئيسية" : "Return to Home",
-      directBooking: isAr ? "احجز عبر الواتساب مباشرة" : "WhatsApp Direct Booking",
-      preferDirect: isAr ? "تفضل تحجز مباشرة؟" : "Prefer to book directly?",
-      knowServices: isAr ? "تعرف على خدماتنا" : "Know Our Services",
-      quickLinks: isAr ? "روابط سريعة" : "Quick Links",
-      coreServices: isAr ? "الخدمات الأساسية" : "Core Services",
-      contactInfo: isAr ? "بيانات التواصل" : "Contact Info",
-      followUs: isAr ? "تابعنا" : "Follow Us",
-      footerText: isAr
-        ? "جميع الحجوزات والاستفسارات تتم مباشرة عبر واتساب."
-        : "All bookings and inquiries are handled directly through WhatsApp.",
-      onlineBooking: isAr ? "أونلاين + حجز مباشر عبر واتساب" : "Online + direct WhatsApp booking",
-      bookingSchedule: isAr ? "الحجز حسب المواعيد المتاحة" : "Booking based on available schedule",
-      rights: isAr ? "جميع الحقوق محفوظة © د. أشرف العبد" : "All rights reserved © Dr. Ashraf El Abd",
-      premium: isAr ? "تجربة احترافية" : "Premium Experience",
-      directWhatsApp: isAr ? "حجز مباشر عبر واتساب" : "Direct WhatsApp Booking",
-      openNow: isAr ? "افتح الآن" : "Open Now",
-      whatsapp: isAr ? "واتساب" : "WhatsApp",
-      facebook: isAr ? "فيسبوك" : "Facebook",
-      instagram: isAr ? "إنستجرام" : "Instagram",
-      tiktok: isAr ? "تيك توك" : "TikTok",
-      packageLabel: isAr ? "باقة" : "Package",
-      detailsConfirmed: isAr ? "تم تأكيد بياناتك" : "Your details confirmed",
-      mostPopular: isAr ? "الأكثر طلبًا" : "MOST POPULAR",
-      international: isAr ? "دولي" : "International",
-      egypt: isAr ? "مصر" : "Egypt",
-    }),
-    [isAr]
+  const whatsappLink = useMemo(
+    () =>
+      `https://wa.me/${siteSettings.whatsappNumber}?text=${encodeURIComponent(
+        siteSettings.whatsappMessageAr || defaultSiteSettings.whatsappMessageAr
+      )}`,
+    [siteSettings]
   );
 
-  const stepOrder: Step[] = ["package", "details", "payment", "confirm"];
-  const stepIdx = stepOrder.indexOf(step);
+  const developerWhatsapp = useMemo(
+    () =>
+      `https://wa.me/${siteSettings.developerPhone}?text=${encodeURIComponent(
+        siteSettings.developerWhatsAppMessage || defaultSiteSettings.developerWhatsAppMessage
+      )}`,
+    [siteSettings]
+  );
 
-  const selectedPkg = PACKAGES.find((p) => p.id === selectedPackage)!;
+  const t = useMemo(
+    () => ({
+      brand: getLocalizedText(lang, "د. أشرف العبد", "Dr. Ashraf El Abd", "Dr. Ashraf El Abd"),
+      brandSub: "ONLINE COACH • ELITE TRANSFORMATION",
+      home: getLocalizedText(lang, "الرئيسية", "Home", "Startseite"),
+      about: getLocalizedText(lang, "نبذة عني", "About", "Über mich"),
+      classes: getLocalizedText(lang, "الكلاسات", "Classes", "Kurse"),
+      booking: getLocalizedText(lang, "الحجز", "Booking", "Buchung"),
+      contact: getLocalizedText(lang, "تواصل", "Contact", "Kontakt"),
 
-  const HOME_PATH = ROUTE_PATHS?.HOME ?? "/";
-  const ABOUT_PATH = ROUTE_PATHS?.ABOUT ?? "/about";
-  const SERVICES_PATH = ROUTE_PATHS?.SERVICES ?? "/services";
-  const BOOKING_PATH = ROUTE_PATHS?.BOOKING ?? "/booking";
+      langArabic: "العربية",
+      langEnglish: "English",
+      langGerman: "Deutsch",
 
-  const FACEBOOK_LINK = "https://www.facebook.com/share/1DTjxnAxVL/?mibextid=wwXIfr";
-  const INSTAGRAM_LINK =
-    "https://www.instagram.com/dr.ashraf_el_abd?igsh=c2tpamFreXFuaGI%3D&utm_source=qr";
-  const TIKTOK_LINK = "https://www.tiktok.com/@dr..ashraf.el.abd?_r=1&_t=ZS-95g5Q6SZ8zp";
+      pageBadge: getLocalizedText(
+        lang,
+        bookingContent.heroBadgeAr,
+        bookingContent.heroBadgeEn,
+        bookingContent.heroBadgeDe,
+        defaultBookingContent.heroBadgeAr
+      ),
+      heroTitle1: getLocalizedText(
+        lang,
+        bookingContent.heroTitle1Ar,
+        bookingContent.heroTitle1En,
+        bookingContent.heroTitle1De,
+        defaultBookingContent.heroTitle1Ar
+      ),
+      heroTitle2: getLocalizedText(
+        lang,
+        bookingContent.heroTitle2Ar,
+        bookingContent.heroTitle2En,
+        bookingContent.heroTitle2De,
+        defaultBookingContent.heroTitle2Ar
+      ),
+      heroText: getLocalizedText(
+        lang,
+        bookingContent.heroTextAr,
+        bookingContent.heroTextEn,
+        bookingContent.heroTextDe,
+        defaultBookingContent.heroTextAr
+      ),
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitted(true);
-  }
+      choosePackage: getLocalizedText(lang, "اختار باقتك", "Choose Your Package", "Wähle dein Paket"),
+      yourDetails: getLocalizedText(lang, "بياناتك", "Your Details", "Deine Daten"),
+      choosePayment: getLocalizedText(lang, "اختار الدفع", "Choose Payment", "Zahlung wählen"),
+      confirmOrder: getLocalizedText(lang, "تأكيد طلبك", "Confirm Your Order", "Bestellung bestätigen"),
+
+      packageStep: getLocalizedText(lang, "الباقة", "Package", "Paket"),
+      detailsStep: getLocalizedText(lang, "البيانات", "Details", "Daten"),
+      paymentStep: getLocalizedText(lang, "الدفع", "Payment", "Zahlung"),
+      confirmStep: getLocalizedText(lang, "التأكيد", "Confirm", "Bestätigung"),
+
+      continue: getLocalizedText(lang, "استمرار", "Continue", "Weiter"),
+      continuePayment: getLocalizedText(lang, "المتابعة للدفع", "Continue to Payment", "Weiter zur Zahlung"),
+      reviewConfirm: getLocalizedText(lang, "مراجعة وتأكيد", "Review & Confirm", "Prüfen & Bestätigen"),
+      confirmStart: getLocalizedText(lang, "تأكيد وابدأ", "Confirm & Start", "Bestätigen & Starten"),
+      back: getLocalizedText(lang, "رجوع", "Back", "Zurück"),
+
+      fullName: getLocalizedText(lang, "الاسم الكامل", "Full Name", "Vollständiger Name"),
+      email: getLocalizedText(lang, "البريد الإلكتروني", "Email", "E-Mail"),
+      phone: getLocalizedText(lang, "رقم الواتساب", "WhatsApp Number", "WhatsApp-Nummer"),
+      country: getLocalizedText(lang, "البلد", "Country", "Land"),
+      goal: getLocalizedText(lang, "هدفك", "Your Goal", "Dein Ziel"),
+      experience: getLocalizedText(lang, "مستوى الخبرة", "Experience Level", "Erfahrungsniveau"),
+
+      selectGoal: getLocalizedText(lang, "اختار هدفك", "Select your goal", "Wähle dein Ziel"),
+      selectLevel: getLocalizedText(lang, "اختار المستوى", "Select level", "Wähle dein Niveau"),
+
+      paymentInstructions: getLocalizedText(lang, "تعليمات الدفع", "Payment Instructions", "Zahlungsanweisungen"),
+      price: getLocalizedText(lang, "السعر", "Price", "Preis"),
+      payment: getLocalizedText(lang, "الدفع", "Payment", "Zahlung"),
+      packageLabel: getLocalizedText(lang, "الباقة", "Package", "Paket"),
+      detailsConfirmed: getLocalizedText(lang, "تم تأكيد بياناتك", "Your details confirmed", "Deine Daten wurden bestätigt"),
+      mostPopular: getLocalizedText(lang, "الأكثر طلبًا", "Most Popular", "Am beliebtesten"),
+
+      satisfaction: getLocalizedText(lang, "ضمان رضا كامل", "100% Satisfaction Guarantee", "100% Zufriedenheitsgarantie"),
+      satisfactionText: getLocalizedText(
+        lang,
+        "إذا التزمت بالخطة ولم ترَ نتائج خلال 30 يومًا، نعيد التخطيط أو نوفر الحل المناسب.",
+        "If you follow the plan and don't see results in 30 days, we'll re-plan or provide the right solution.",
+        "Wenn du dem Plan folgst und innerhalb von 30 Tagen keine Ergebnisse siehst, passen wir den Plan an oder finden die passende Lösung."
+      ),
+
+      successTitle: getLocalizedText(
+        lang,
+        bookingContent.successTitleAr,
+        bookingContent.successTitleEn,
+        bookingContent.successTitleDe,
+        defaultBookingContent.successTitleAr
+      ),
+      successText: getLocalizedText(
+        lang,
+        bookingContent.successTextAr,
+        bookingContent.successTextEn,
+        bookingContent.successTextDe,
+        defaultBookingContent.successTextAr
+      ),
+
+      contactWhatsApp: getLocalizedText(lang, "تواصل عبر واتساب", "Contact via WhatsApp", "Über WhatsApp kontaktieren"),
+      returnHome: getLocalizedText(lang, "العودة للرئيسية", "Return to Home", "Zurück zur Startseite"),
+      directBooking: getLocalizedText(lang, "احجز عبر الواتساب مباشرة", "WhatsApp Direct Booking", "Direkte WhatsApp-Buchung"),
+      preferDirect: getLocalizedText(lang, "تفضل تحجز مباشرة؟", "Prefer to book directly?", "Direkt buchen?"),
+      knowClasses: getLocalizedText(lang, "تعرف على الكلاسات", "View Classes", "Kurse ansehen"),
+
+      quickLinks: getLocalizedText(lang, "روابط سريعة", "Quick Links", "Schnellzugriffe"),
+      coreServices: getLocalizedText(lang, "الخدمات الأساسية", "Core Services", "Kernleistungen"),
+      contactInfo: getLocalizedText(lang, "بيانات التواصل", "Contact Info", "Kontaktinformationen"),
+      followUs: getLocalizedText(lang, "تابعنا", "Follow Us", "Folge uns"),
+
+      footerText: getLocalizedText(
+        lang,
+        bookingContent.footerTextAr,
+        bookingContent.footerTextEn,
+        bookingContent.footerTextDe,
+        defaultBookingContent.footerTextAr
+      ),
+      onlineBooking: getLocalizedText(
+        lang,
+        "أونلاين + حجز مباشر عبر واتساب",
+        "Online + direct WhatsApp booking",
+        "Online + direkte WhatsApp-Buchung"
+      ),
+      bookingSchedule: getLocalizedText(
+        lang,
+        "الحجز حسب المواعيد المتاحة",
+        "Booking based on available schedule",
+        "Buchung nach verfügbaren Zeiten"
+      ),
+      rights: getLocalizedText(
+        lang,
+        "جميع الحقوق محفوظة © د. أشرف العبد",
+        "All rights reserved © Dr. Ashraf El Abd",
+        "Alle Rechte vorbehalten © Dr. Ashraf El Abd"
+      ),
+      premium: getLocalizedText(lang, "تجربة احترافية", "Premium Experience", "Premium-Erlebnis"),
+      directWhatsApp: getLocalizedText(lang, "حجز مباشر عبر واتساب", "Direct WhatsApp Booking", "Direkte WhatsApp-Buchung"),
+      openNow: getLocalizedText(lang, "افتح الآن", "Open Now", "Jetzt öffnen"),
+
+      whatsapp: getLocalizedText(lang, "واتساب", "WhatsApp", "WhatsApp"),
+      facebook: "Facebook",
+      instagram: "Instagram",
+      tiktok: "TikTok",
+
+      goalFatLoss: getLocalizedText(lang, "خسارة دهون", "Fat Loss", "Fettabbau"),
+      goalMuscleGain: getLocalizedText(lang, "بناء عضل", "Muscle Gain", "Muskelaufbau"),
+      goalRecomp: getLocalizedText(lang, "إعادة تكوين الجسم", "Body Recomposition", "Körperrekomposition"),
+      goalCompetition: getLocalizedText(lang, "تحضير بطولة", "Competition Prep", "Wettkampfvorbereitung"),
+      goalGeneral: getLocalizedText(lang, "لياقة عامة", "General Fitness", "Allgemeine Fitness"),
+
+      expBeginner: getLocalizedText(lang, "مبتدئ", "Beginner (0-1 yr)", "Anfänger (0-1 Jahr)"),
+      expIntermediate: getLocalizedText(lang, "متوسط", "Intermediate (1-3 yrs)", "Mittelstufe (1-3 Jahre)"),
+      expAdvanced: getLocalizedText(lang, "متقدم", "Advanced (3+ yrs)", "Fortgeschritten (3+ Jahre)"),
+      expCompetitor: getLocalizedText(lang, "رياضي محترف", "Competitive Athlete", "Wettkampfsportler"),
+
+      themeLight: getLocalizedText(lang, "فاتح", "Light", "Hell"),
+      themeDark: getLocalizedText(lang, "ليلي", "Dark", "Dunkel"),
+
+      sending: getLocalizedText(lang, "جاري الإرسال...", "Sending...", "Wird gesendet..."),
+    }),
+    [lang, bookingContent]
+  );
 
   const navLinkBase = ({ isActive }: { isActive: boolean }) =>
     ({
@@ -339,7 +831,7 @@ export default function Booking() {
       boxShadow: isActive ? colors.glow : "none",
     }) as const;
 
-  const inputStyle: React.CSSProperties = {
+  const inputStyle: CSSProperties = {
     width: "100%",
     padding: "14px 16px",
     color: colors.text,
@@ -350,6 +842,81 @@ export default function Booking() {
     borderRadius: 16,
     fontFamily: "Cairo, sans-serif",
   };
+
+  const getPackageName = (pkg: BookingPackage) =>
+    getLocalizedText(lang, pkg.nameAr, pkg.nameEn, pkg.nameDe, pkg.nameEn || pkg.nameAr);
+
+  const getPackageFeatures = (pkg: BookingPackage) => {
+    if (lang === "ar") return pkg.featuresAr ?? pkg.featuresEn ?? [];
+    if (lang === "en") return pkg.featuresEn ?? pkg.featuresAr ?? [];
+    return pkg.featuresDe ?? pkg.featuresEn ?? pkg.featuresAr ?? [];
+  };
+
+  const getPackagePriceNote = (pkg: BookingPackage) =>
+    getLocalizedText(lang, pkg.priceNoteAr, pkg.priceNoteEn, pkg.priceNoteDe);
+
+  const getPackageBadge = (pkg: BookingPackage) =>
+    getLocalizedText(lang, pkg.badgeAr, pkg.badgeEn, pkg.badgeDe);
+
+  const getPaymentName = (pm: PaymentMethodItem) =>
+    getLocalizedText(lang, pm.nameAr, pm.nameEn, pm.nameDe, pm.nameEn || pm.nameAr);
+
+  const getPaymentRegion = (pm: PaymentMethodItem) =>
+    getLocalizedText(lang, pm.regionAr, pm.regionEn, pm.regionDe);
+
+  const getPaymentNote = (pm: PaymentMethodItem) =>
+    getLocalizedText(lang, pm.noteAr, pm.noteEn, pm.noteDe);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedPkg || !selectedPaymentMethod) return;
+
+    setSubmitting(true);
+
+    try {
+      await addDoc(collection(db, "bookingRequests"), {
+        packageId: selectedPkg.id,
+        packageNameAr: selectedPkg.nameAr,
+        packageNameEn: selectedPkg.nameEn,
+        packageNameDe: selectedPkg.nameDe,
+        paymentMethodId: selectedPaymentMethod.id,
+        paymentMethodNameAr: selectedPaymentMethod.nameAr,
+        paymentMethodNameEn: selectedPaymentMethod.nameEn,
+        paymentMethodNameDe: selectedPaymentMethod.nameDe,
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        country: form.country,
+        goal: form.goal,
+        experience: form.experience,
+        status: "new",
+        lang,
+        createdAt: new Date().toISOString(),
+      });
+      setSubmitted(true);
+    } catch {
+      setSubmitted(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!selectedPkg || !selectedPaymentMethod) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          backgroundColor: colors.bg,
+          color: colors.text,
+          fontFamily: "Cairo, sans-serif",
+        }}
+      >
+        ...
+      </div>
+    );
+  }
 
   return (
     <div
@@ -396,9 +963,7 @@ export default function Booking() {
           >
             <BrandLogo colors={colors} />
             <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
-              <span style={{ color: colors.gold, fontWeight: 900, fontSize: 21 }}>
-                {t.brand}
-              </span>
+              <span style={{ color: colors.gold, fontWeight: 900, fontSize: 21 }}>{t.brand}</span>
               <span
                 style={{
                   fontSize: 11,
@@ -429,8 +994,8 @@ export default function Booking() {
             <NavLink to={ABOUT_PATH} style={navLinkBase}>
               {t.about}
             </NavLink>
-            <NavLink to={SERVICES_PATH} style={navLinkBase}>
-              {t.services}
+            <NavLink to={CLASSES_PATH} style={navLinkBase}>
+              {t.classes}
             </NavLink>
             <NavLink to={BOOKING_PATH} style={navLinkBase}>
               {t.booking}
@@ -450,58 +1015,91 @@ export default function Booking() {
             </a>
           </nav>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              onClick={() => setLang((prev) => (prev === "ar" ? "en" : "ar"))}
-              aria-label={isAr ? "Change language" : "تغيير اللغة"}
-              style={{
-                border: `1px solid ${colors.border}`,
-                background: colors.bgSoft,
-                color: colors.text,
-                borderRadius: 14,
-                width: 46,
-                height: 46,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                boxShadow: colors.shadow,
-                fontWeight: 900,
-                fontSize: 15,
-              }}
-            >
-              {t.langBadge}
-            </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ position: "relative" }}>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Lang)}
+                style={{
+                  height: 46,
+                  minWidth: 145,
+                  borderRadius: 14,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.bgSoft,
+                  color: colors.text,
+                  fontWeight: 800,
+                  padding: isAr ? "0 12px 0 38px" : "0 38px 0 12px",
+                  outline: "none",
+                  cursor: "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                  boxShadow: colors.shadow,
+                  fontFamily: "Cairo, sans-serif",
+                }}
+                aria-label="Language selector"
+              >
+                <option value="ar">{t.langArabic}</option>
+                <option value="en">{t.langEnglish}</option>
+                <option value="de">{t.langGerman}</option>
+              </select>
+
+              <span
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  [isAr ? "left" : "right"]: 12,
+                  pointerEvents: "none",
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: 900,
+                }}
+              >
+                ▼
+              </span>
+            </div>
 
             <button
               onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
-              aria-label={isDark ? "Light mode" : "Dark mode"}
+              aria-label="Theme toggle"
               style={{
+                height: 46,
+                minWidth: 118,
+                borderRadius: 14,
                 border: `1px solid ${colors.border}`,
                 background: colors.bgSoft,
                 color: colors.text,
-                borderRadius: 14,
-                width: 46,
-                height: 46,
+                cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                cursor: "pointer",
+                gap: 8,
+                padding: "0 14px",
+                fontWeight: 800,
                 boxShadow: colors.shadow,
               }}
             >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  background: colors.goldSoft,
+                  color: colors.gold,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {isDark ? <Moon size={14} /> : <Sun size={14} />}
+              </span>
+              <span>{isDark ? t.themeDark : t.themeLight}</span>
             </button>
 
             <a
-              href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+              href={whatsappLink}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -525,7 +1123,7 @@ export default function Booking() {
       </header>
 
       <a
-        href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+        href={whatsappLink}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="WhatsApp"
@@ -553,7 +1151,7 @@ export default function Booking() {
         style={{
           position: "relative",
           overflow: "hidden",
-          padding: "80px 20px 50px",
+          padding: "88px 20px 56px",
           background: `linear-gradient(135deg, ${colors.bg} 0%, ${colors.section} 50%, ${colors.bg} 100%)`,
           borderBottom: `1px solid ${colors.border}`,
         }}
@@ -583,7 +1181,7 @@ export default function Booking() {
           }}
         />
 
-        <div style={{ maxWidth: 900, margin: "0 auto", textAlign: "center", position: "relative", zIndex: 1 }}>
+        <div style={{ maxWidth: 980, margin: "0 auto", textAlign: "center", position: "relative", zIndex: 1 }}>
           <div
             style={{
               display: "inline-flex",
@@ -596,21 +1194,20 @@ export default function Booking() {
               color: colors.gold,
               fontSize: 13,
               fontWeight: 800,
-              marginBottom: 16,
+              marginBottom: 18,
               boxShadow: colors.glow,
             }}
           >
-            <Flame size={14} />
+            <Sparkles size={14} />
             {t.pageBadge}
           </div>
 
           <h1
             style={{
-              fontSize: "clamp(2.4rem, 5vw, 4.4rem)",
-              lineHeight: 1.05,
+              fontSize: "clamp(2.6rem, 6vw, 4.9rem)",
+              lineHeight: 1,
               margin: "0 0 14px",
               fontWeight: 900,
-              color: colors.text,
             }}
           >
             {t.heroTitle1} <span style={{ color: colors.gold }}>{t.heroTitle2}</span>
@@ -620,25 +1217,73 @@ export default function Booking() {
             style={{
               color: colors.textMuted,
               maxWidth: 760,
-              margin: "0 auto",
-              lineHeight: 1.9,
+              margin: "0 auto 26px",
+              lineHeight: 1.95,
               fontSize: 18,
             }}
           >
             {t.heroText}
           </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 14,
+              maxWidth: 820,
+              margin: "0 auto",
+            }}
+          >
+            {[
+              { value: "1", label: t.packageStep },
+              { value: "2", label: t.detailsStep },
+              { value: "3", label: t.paymentStep },
+              { value: "4", label: t.confirmStep },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  padding: 18,
+                  borderRadius: 20,
+                  background: colors.bgCard,
+                  border: `1px solid ${colors.border}`,
+                  boxShadow: colors.shadow,
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 24, fontWeight: 900, color: colors.gold, marginBottom: 6 }}>
+                  {item.value}
+                </div>
+                <div style={{ fontSize: 13, color: colors.textMuted, fontWeight: 800 }}>
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       <section
         style={{
           backgroundColor: colors.sectionAlt,
-          padding: "18px 20px",
+          padding: "18px 20px 26px",
           borderBottom: `1px solid ${colors.border}`,
         }}
       >
         <div style={{ maxWidth: 920, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              overflowX: "auto",
+              padding: 8,
+              background: colors.bgSoft,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 24,
+              boxShadow: colors.shadow,
+              gap: 8,
+            }}
+          >
             {stepOrder.map((s, i) => {
               const label =
                 s === "package"
@@ -650,44 +1295,45 @@ export default function Booking() {
                   : t.confirmStep;
 
               return (
-                <div key={s} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div
+                <button
+                  key={s}
+                  onClick={() => {
+                    if (i <= stepIdx) setStep(s);
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    border: "none",
+                    cursor: i <= stepIdx ? "pointer" : "default",
+                    padding: "14px 18px",
+                    borderRadius: 18,
+                    background:
+                      i === stepIdx
+                        ? `linear-gradient(135deg, ${colors.goldSoft}, rgba(255,255,255,0.02))`
+                        : "transparent",
+                    color: i === stepIdx ? colors.gold : i < stepIdx ? colors.text : colors.textMuted,
+                    fontWeight: 900,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    boxShadow: i === stepIdx ? colors.glow : "none",
+                  }}
+                >
+                  <span
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: "50%",
-                      display: "flex",
+                      width: 22,
+                      height: 22,
+                      borderRadius: 999,
+                      display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontWeight: 900,
+                      background: i <= stepIdx ? colors.goldSoft : "transparent",
                       fontSize: 12,
-                      background:
-                        i <= stepIdx ? "linear-gradient(135deg, #D4AF37, #B8860B)" : colors.bgSoft,
-                      color: i <= stepIdx ? "#111" : colors.textMuted,
-                      border: i === stepIdx ? `2px solid ${colors.gold}` : "2px solid transparent",
                     }}
                   >
                     {i + 1}
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      color: i === stepIdx ? colors.gold : colors.textMuted,
-                    }}
-                  >
-                    {label}
                   </span>
-                  {i < 3 && (
-                    <div
-                      style={{
-                        width: 24,
-                        height: 1,
-                        background: colors.border,
-                      }}
-                    />
-                  )}
-                </div>
+                  {label}
+                </button>
               );
             })}
           </div>
@@ -713,12 +1359,12 @@ export default function Booking() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
                     gap: 18,
                     marginBottom: 30,
                   }}
                 >
-                  {PACKAGES.map((pkg) => (
+                  {packageList.map((pkg) => (
                     <button
                       key={pkg.id}
                       onClick={() => setSelectedPackage(pkg.id)}
@@ -726,9 +1372,12 @@ export default function Booking() {
                         position: "relative",
                         textAlign: isAr ? "right" : "left",
                         padding: 24,
-                        borderRadius: 24,
+                        borderRadius: 28,
                         cursor: "pointer",
-                        background: selectedPackage === pkg.id ? colors.goldSoft : colors.bgCard,
+                        background:
+                          selectedPackage === pkg.id
+                            ? `linear-gradient(135deg, ${colors.goldSoft} 0%, ${colors.bgCard} 100%)`
+                            : colors.bgCard,
                         border:
                           selectedPackage === pkg.id
                             ? `2px solid ${colors.gold}`
@@ -738,7 +1387,7 @@ export default function Booking() {
                         color: colors.text,
                       }}
                     >
-                      {pkg.isPopular && (
+                      {(pkg.isPopular || getPackageBadge(pkg)) && (
                         <div
                           style={{
                             position: "absolute",
@@ -752,31 +1401,57 @@ export default function Booking() {
                             borderRadius: 999,
                           }}
                         >
-                          {t.mostPopular}
+                          {getPackageBadge(pkg) || t.mostPopular}
                         </div>
                       )}
 
-                      <div style={{ fontWeight: 900, fontSize: 24, color: selectedPackage === pkg.id ? colors.gold : colors.text }}>
-                        {pkg.name}
-                      </div>
-                      <div style={{ color: colors.textMuted, marginTop: 4, marginBottom: 12, fontSize: 14 }}>
-                        {pkg.nameAr}
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 24,
+                          color: selectedPackage === pkg.id ? colors.gold : colors.text,
+                          marginBottom: 12,
+                        }}
+                      >
+                        {getPackageName(pkg)}
                       </div>
 
                       <div style={{ fontWeight: 900, fontSize: 28, marginBottom: 14 }}>
-                        {pkg.price}
-                        <span style={{ color: colors.textMuted, fontSize: 16, marginInlineStart: 6 }}>
-                          {pkg.priceNote}
-                        </span>
+                        {formatPrice(pkg.price, pkg.currency || "EGP")}
+                        {pkg.oldPrice ? (
+                          <span
+                            style={{
+                              color: colors.textMuted,
+                              fontSize: 16,
+                              marginInlineStart: 8,
+                              textDecoration: "line-through",
+                            }}
+                          >
+                            {formatPrice(pkg.oldPrice, pkg.currency || "EGP")}
+                          </span>
+                        ) : null}
+                        {getPackagePriceNote(pkg) ? (
+                          <span style={{ color: colors.textMuted, fontSize: 16, marginInlineStart: 6 }}>
+                            {getPackagePriceNote(pkg)}
+                          </span>
+                        ) : null}
                       </div>
 
                       <div style={{ display: "grid", gap: 10 }}>
-                        {pkg.features.slice(0, 3).map((f: string, i: number) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <CheckCircle size={15} style={{ color: selectedPackage === pkg.id ? colors.gold : colors.textMuted, flexShrink: 0 }} />
-                            <span style={{ color: colors.textSoft, fontSize: 14 }}>{f}</span>
-                          </div>
-                        ))}
+                        {getPackageFeatures(pkg)
+                          .slice(0, 4)
+                          .map((f, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <CheckCircle
+                                size={15}
+                                style={{
+                                  color: selectedPackage === pkg.id ? colors.gold : colors.textMuted,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span style={{ color: colors.textSoft, fontSize: 14 }}>{f}</span>
+                            </div>
+                          ))}
                       </div>
                     </button>
                   ))}
@@ -799,7 +1474,7 @@ export default function Booking() {
                       boxShadow: "0 10px 40px rgba(212,166,63,0.30)",
                     }}
                   >
-                    {t.continue} {selectedPkg.name}
+                    {t.continue} {getPackageName(selectedPkg)}
                     <ArrowRight size={16} />
                   </button>
                 </div>
@@ -807,7 +1482,12 @@ export default function Booking() {
             )}
 
             {step === "details" && (
-              <form onSubmit={(e) => { e.preventDefault(); setStep("payment"); }}>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setStep("payment");
+                }}
+              >
                 <h2
                   style={{
                     fontSize: "clamp(2rem, 4vw, 3rem)",
@@ -843,7 +1523,15 @@ export default function Booking() {
                       { id: "country", label: t.country, type: "text", required: true },
                     ].map((field) => (
                       <div key={field.id}>
-                        <label style={{ display: "block", fontWeight: 800, color: colors.gold, marginBottom: 8, fontSize: 13 }}>
+                        <label
+                          style={{
+                            display: "block",
+                            fontWeight: 800,
+                            color: colors.gold,
+                            marginBottom: 8,
+                            fontSize: 13,
+                          }}
+                        >
                           {field.label}
                         </label>
                         <input
@@ -858,7 +1546,15 @@ export default function Booking() {
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 800, color: colors.gold, marginBottom: 8, fontSize: 13 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontWeight: 800,
+                        color: colors.gold,
+                        marginBottom: 8,
+                        fontSize: 13,
+                      }}
+                    >
                       {t.goal}
                     </label>
                     <select
@@ -868,16 +1564,24 @@ export default function Booking() {
                       style={inputStyle}
                     >
                       <option value="">{t.selectGoal}</option>
-                      <option value="fat-loss">{isAr ? "خسارة دهون" : "Fat Loss"}</option>
-                      <option value="muscle-gain">{isAr ? "بناء عضل" : "Muscle Gain"}</option>
-                      <option value="body-recomp">{isAr ? "إعادة تكوين الجسم" : "Body Recomposition"}</option>
-                      <option value="competition">{isAr ? "تحضير بطولة" : "Competition Prep"}</option>
-                      <option value="general">{isAr ? "لياقة عامة" : "General Fitness"}</option>
+                      <option value="fat-loss">{t.goalFatLoss}</option>
+                      <option value="muscle-gain">{t.goalMuscleGain}</option>
+                      <option value="body-recomp">{t.goalRecomp}</option>
+                      <option value="competition">{t.goalCompetition}</option>
+                      <option value="general">{t.goalGeneral}</option>
                     </select>
                   </div>
 
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 800, color: colors.gold, marginBottom: 8, fontSize: 13 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontWeight: 800,
+                        color: colors.gold,
+                        marginBottom: 8,
+                        fontSize: 13,
+                      }}
+                    >
                       {t.experience}
                     </label>
                     <select
@@ -887,10 +1591,10 @@ export default function Booking() {
                       style={inputStyle}
                     >
                       <option value="">{t.selectLevel}</option>
-                      <option value="beginner">{isAr ? "مبتدئ" : "Beginner (0-1 yr)"}</option>
-                      <option value="intermediate">{isAr ? "متوسط" : "Intermediate (1-3 yrs)"}</option>
-                      <option value="advanced">{isAr ? "متقدم" : "Advanced (3+ yrs)"}</option>
-                      <option value="competitor">{isAr ? "رياضي محترف" : "Competitive Athlete"}</option>
+                      <option value="beginner">{t.expBeginner}</option>
+                      <option value="intermediate">{t.expIntermediate}</option>
+                      <option value="advanced">{t.expAdvanced}</option>
+                      <option value="competitor">{t.expCompetitor}</option>
                     </select>
                   </div>
 
@@ -972,13 +1676,15 @@ export default function Booking() {
                   >
                     <div>
                       <div style={{ fontWeight: 900, fontSize: 20, color: colors.gold }}>
-                        {selectedPkg.name} {isAr ? `· باقة ${selectedPkg.nameAr}` : `· ${t.packageLabel}`}
+                        {getPackageName(selectedPkg)}
                       </div>
                       <div style={{ color: colors.textMuted, marginTop: 4, fontSize: 14 }}>
                         {form.name || t.detailsConfirmed}
                       </div>
                     </div>
-                    <div style={{ fontWeight: 900, fontSize: 24 }}>{selectedPkg.price}</div>
+                    <div style={{ fontWeight: 900, fontSize: 24 }}>
+                      {formatPrice(selectedPkg.price, selectedPkg.currency || "EGP")}
+                    </div>
                   </div>
 
                   <div
@@ -989,7 +1695,7 @@ export default function Booking() {
                       marginBottom: 22,
                     }}
                   >
-                    {PAYMENT_METHODS.map((pm) => (
+                    {paymentList.map((pm) => (
                       <button
                         key={pm.id}
                         onClick={() => setSelectedPayment(pm.id)}
@@ -1001,24 +1707,21 @@ export default function Booking() {
                           padding: 18,
                           borderRadius: 20,
                           cursor: "pointer",
-                          background: selectedPayment === pm.id ? `${pm.color}15` : colors.bgCard,
+                          background: selectedPayment === pm.id ? `${pm.color || "#D4AF37"}15` : colors.bgCard,
                           border:
                             selectedPayment === pm.id
-                              ? `2px solid ${pm.color}`
+                              ? `2px solid ${pm.color || colors.gold}`
                               : `1px solid ${colors.border}`,
-                          boxShadow: selectedPayment === pm.id ? `0 0 20px ${pm.color}20` : "none",
+                          boxShadow:
+                            selectedPayment === pm.id ? `0 0 20px ${(pm.color || "#D4AF37")}20` : "none",
                           color: colors.text,
                           transition: "0.25s ease",
                         }}
                       >
-                        <span style={{ fontSize: 28, marginBottom: 8 }}>{pm.flag}</span>
-                        <div style={{ fontWeight: 900, fontSize: 14 }}>{isAr ? pm.nameAr : pm.name}</div>
+                        <span style={{ fontSize: 28, marginBottom: 8 }}>{pm.flag || "💳"}</span>
+                        <div style={{ fontWeight: 900, fontSize: 14 }}>{getPaymentName(pm)}</div>
                         <div style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
-                          {isAr
-                            ? pm.region === "Egypt"
-                              ? t.egypt
-                              : t.international
-                            : pm.region}
+                          {getPaymentRegion(pm)}
                         </div>
                       </button>
                     ))}
@@ -1037,37 +1740,57 @@ export default function Booking() {
                       {t.paymentInstructions}
                     </div>
 
-                    {selectedPayment === "instapay" && (
-                      <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.8, fontSize: 14 }}>
-                        {isAr
-                          ? 'حوّل عبر إنستاباي إلى: "01234567890" ثم أرسل لقطة تأكيد على واتساب.'
-                          : 'Send payment via InstaPay to: "01234567890" then send a confirmation screenshot on WhatsApp.'}
-                      </p>
-                    )}
+                    {selectedPaymentMethod.value ? (
+                      <div
+                        style={{
+                          background: colors.bgSoft,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 16,
+                          padding: "12px 14px",
+                          marginBottom: 12,
+                          fontWeight: 800,
+                          color: colors.text,
+                          wordBreak: "break-word",
+                          direction:
+                            selectedPaymentMethod.id === "vodafone" ? "ltr" : isAr ? "rtl" : "ltr",
+                          textAlign:
+                            selectedPaymentMethod.id === "vodafone"
+                              ? "left"
+                              : isAr
+                              ? "right"
+                              : "left",
+                        }}
+                      >
+                        {selectedPaymentMethod.value}
+                      </div>
+                    ) : null}
 
-                    {selectedPayment === "vodafone" && (
-                      <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.8, fontSize: 14 }}>
-                        {isAr
-                          ? 'حوّل عبر فودافون كاش إلى: "01234567890" ثم أرسل لقطة التأكيد على واتساب.'
-                          : 'Transfer via Vodafone Cash to: "01234567890" then send a confirmation screenshot on WhatsApp.'}
-                      </p>
-                    )}
+                    {selectedPaymentMethod.link ? (
+                      <a
+                        href={selectedPaymentMethod.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "12px 18px",
+                          borderRadius: 14,
+                          background: colors.heroButton,
+                          color: "#111",
+                          textDecoration: "none",
+                          fontWeight: 900,
+                          marginBottom: 12,
+                        }}
+                      >
+                        <CreditCard size={16} />
+                        {getLocalizedText(lang, "افتح رابط الدفع", "Open Payment Link", "Zahlungslink öffnen")}
+                      </a>
+                    ) : null}
 
-                    {selectedPayment === "stripe" && (
-                      <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.8, fontSize: 14 }}>
-                        {isAr
-                          ? "سيتم إرسال رابط دفع Stripe آمن عبر واتساب بعد إرسال الحجز."
-                          : "You'll receive a secure Stripe payment link via WhatsApp after submitting your booking."}
-                      </p>
-                    )}
-
-                    {selectedPayment === "paypal" && (
-                      <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.8, fontSize: 14 }}>
-                        {isAr
-                          ? "سيتم إرسال رابط PayPal عبر واتساب ويقبل الدفع من مختلف الدول."
-                          : "A PayPal payment link will be sent via WhatsApp and supports international payments."}
-                      </p>
-                    )}
+                    <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.9, fontSize: 14 }}>
+                      {getPaymentNote(selectedPaymentMethod)}
+                    </p>
                   </div>
 
                   <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
@@ -1143,14 +1866,15 @@ export default function Booking() {
                     }}
                   >
                     {[
-                      { label: t.packageLabel, value: selectedPkg.name },
-                      { label: t.price, value: `${selectedPkg.price}/month` },
-                      { label: t.name, value: form.name || "—" },
+                      { label: t.packageLabel, value: getPackageName(selectedPkg) },
+                      { label: t.price, value: `${formatPrice(selectedPkg.price, selectedPkg.currency || "EGP")} ${getPackagePriceNote(selectedPkg)}` },
+                      { label: t.fullName, value: form.name || "—" },
                       { label: t.email, value: form.email || "—" },
                       { label: t.phone, value: form.phone || "—" },
                       { label: t.country, value: form.country || "—" },
                       { label: t.goal, value: form.goal || "—" },
-                      { label: t.payment, value: PAYMENT_METHODS.find((p) => p.id === selectedPayment)?.name || "—" },
+                      { label: t.experience, value: form.experience || "—" },
+                      { label: t.payment, value: getPaymentName(selectedPaymentMethod) || "—" },
                     ].map((row) => (
                       <div key={row.label}>
                         <div style={{ color: colors.textMuted, fontSize: 12, marginBottom: 4 }}>{row.label}</div>
@@ -1170,7 +1894,7 @@ export default function Booking() {
                       border: "1px solid rgba(34,197,94,0.2)",
                     }}
                   >
-                    <Shield size={20} style={{ color: "#22c55e", flexShrink: 0, marginTop: 2 }} />
+                    <Shield style={{ color: colors.success, flexShrink: 0, marginTop: 2 }} size={20} />
                     <div>
                       <div style={{ fontWeight: 900, fontSize: 15 }}>{t.satisfaction}</div>
                       <div style={{ color: colors.textMuted, fontSize: 13, marginTop: 4, lineHeight: 1.7 }}>
@@ -1199,6 +1923,7 @@ export default function Booking() {
 
                   <button
                     type="submit"
+                    disabled={submitting}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
@@ -1208,13 +1933,14 @@ export default function Booking() {
                       background: colors.heroButton,
                       color: "#111",
                       border: "none",
-                      cursor: "pointer",
+                      cursor: submitting ? "wait" : "pointer",
                       fontWeight: 900,
                       boxShadow: "0 0 30px rgba(212,175,55,0.35)",
+                      opacity: submitting ? 0.8 : 1,
                     }}
                   >
                     <Flame size={18} />
-                    {t.confirmStart}
+                    {submitting ? t.sending : t.confirmStart}
                   </button>
                 </div>
               </form>
@@ -1232,7 +1958,7 @@ export default function Booking() {
                 marginBottom: 10,
               }}
             >
-              {t.successTitle} <span style={{ color: colors.gold }}>{t.successSub}</span>
+              {t.successTitle}
             </h2>
 
             <div
@@ -1247,9 +1973,23 @@ export default function Booking() {
               }}
             >
               <div style={{ display: "grid", gap: 14 }}>
-                {t.successList.map((s, i) => (
+                {[
+                  t.successText,
+                  getLocalizedText(
+                    lang,
+                    "أكمل الدفع وأرسل لقطة التأكيد على واتساب.",
+                    "Complete your payment and send the confirmation screenshot on WhatsApp.",
+                    "Schließe die Zahlung ab und sende den Zahlungsnachweis per WhatsApp."
+                  ),
+                  getLocalizedText(
+                    lang,
+                    "رحلة التغيير بدأت الآن.",
+                    "Your transformation journey starts now.",
+                    "Deine Veränderungsreise beginnt jetzt."
+                  ),
+                ].map((s, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <CheckCircle size={18} style={{ color: "#22c55e", flexShrink: 0, marginTop: 2 }} />
+                    <CheckCircle size={18} style={{ color: colors.success, flexShrink: 0, marginTop: 2 }} />
                     <span style={{ color: colors.textSoft, lineHeight: 1.8 }}>{s}</span>
                   </div>
                 ))}
@@ -1257,7 +1997,7 @@ export default function Booking() {
             </div>
 
             <a
-              href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+              href={whatsappLink}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -1302,11 +2042,9 @@ export default function Booking() {
         }}
       >
         <div style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
-          <p style={{ color: colors.textMuted, marginBottom: 18 }}>
-            {t.preferDirect}
-          </p>
+          <p style={{ color: colors.textMuted, marginBottom: 18 }}>{t.preferDirect}</p>
           <a
-            href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+            href={whatsappLink}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -1353,17 +2091,28 @@ export default function Booking() {
             <div style={{ position: "relative", zIndex: 1 }}>
               <div style={{ textAlign: "center", marginBottom: 28 }}>
                 <h2 style={{ margin: "0 0 12px", fontSize: "clamp(1.9rem, 3vw, 2.6rem)", fontWeight: 900 }}>
-                  {isAr ? "جاهز تبدأ؟" : "Ready To Start?"}
+                  {getLocalizedText(lang, "جاهز تبدأ؟", "Ready To Start?", "Bereit zu starten?")}
                 </h2>
                 <p style={{ margin: "0 auto 22px", color: colors.textSoft, lineHeight: 1.9, maxWidth: 760 }}>
-                  {isAr
-                    ? "ابدأ المحادثة الآن واختر الباقة المناسبة لك."
-                    : "Start the conversation now and choose the package that fits you."}
+                  {getLocalizedText(
+                    lang,
+                    "ابدأ المحادثة الآن واختر الباقة المناسبة لك.",
+                    "Start the conversation now and choose the package that fits you.",
+                    "Starte jetzt das Gespräch und wähle das Paket, das zu dir passt."
+                  )}
                 </p>
 
-                <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 28 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                    marginBottom: 28,
+                  }}
+                >
                   <a
-                    href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+                    href={whatsappLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -1380,7 +2129,7 @@ export default function Booking() {
                   </a>
 
                   <NavLink
-                    to={SERVICES_PATH}
+                    to={CLASSES_PATH}
                     style={{
                       border: `1px solid ${colors.border}`,
                       color: colors.text,
@@ -1391,7 +2140,7 @@ export default function Booking() {
                       fontWeight: 800,
                     }}
                   >
-                    {t.knowServices}
+                    {t.knowClasses}
                   </NavLink>
                 </div>
               </div>
@@ -1404,7 +2153,7 @@ export default function Booking() {
                 }}
               >
                 <SocialLinkCard
-                  href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+                  href={whatsappLink}
                   icon={<MessageCircle size={20} />}
                   title={t.whatsapp}
                   subtitle={t.openNow}
@@ -1413,7 +2162,7 @@ export default function Booking() {
                 />
 
                 <SocialLinkCard
-                  href={FACEBOOK_LINK}
+                  href={siteSettings.facebookLink}
                   icon={<FacebookIcon size={20} />}
                   title={t.facebook}
                   subtitle={t.openNow}
@@ -1422,7 +2171,7 @@ export default function Booking() {
                 />
 
                 <SocialLinkCard
-                  href={INSTAGRAM_LINK}
+                  href={siteSettings.instagramLink}
                   icon={<InstagramIcon size={20} />}
                   title={t.instagram}
                   subtitle={t.openNow}
@@ -1431,7 +2180,7 @@ export default function Booking() {
                 />
 
                 <SocialLinkCard
-                  href={TIKTOK_LINK}
+                  href={siteSettings.tiktokLink}
                   icon={<TikTokIcon size={20} />}
                   title={t.tiktok}
                   subtitle={t.openNow}
@@ -1480,20 +2229,11 @@ export default function Booking() {
             }}
           >
             <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  marginBottom: 16,
-                }}
-              >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 <BrandLogo colors={colors} size={50} />
 
                 <div>
-                  <div style={{ color: colors.gold, fontWeight: 900, fontSize: 20 }}>
-                    {t.brand}
-                  </div>
+                  <div style={{ color: colors.gold, fontWeight: 900, fontSize: 20 }}>{t.brand}</div>
                   <div style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
                     {t.brandSub}
                   </div>
@@ -1505,7 +2245,7 @@ export default function Booking() {
               </p>
 
               <a
-                href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+                href={whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -1535,8 +2275,8 @@ export default function Booking() {
                 <NavLink to={ABOUT_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.about}
                 </NavLink>
-                <NavLink to={SERVICES_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
-                  {t.services}
+                <NavLink to={CLASSES_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
+                  {t.classes}
                 </NavLink>
                 <NavLink to={BOOKING_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.booking}
@@ -1550,11 +2290,10 @@ export default function Booking() {
             <div>
               <h3 style={{ margin: "0 0 16px", color: colors.gold, fontSize: 17 }}>{t.coreServices}</h3>
               <div style={{ display: "grid", gap: 12, color: colors.textSoft, fontSize: 14 }}>
-                <span>{isAr ? "التدريب الأونلاين" : "Online Coaching"}</span>
-                <span>{isAr ? "برامج التغذية" : "Nutrition Programs"}</span>
-                <span>{isAr ? "تحضير البطولات" : "Competition Prep"}</span>
-                <span>{isAr ? "الاستشفاء والحجامة" : "Recovery & Hijama"}</span>
-                <span>{isAr ? "الكورسات والورش" : "Courses & Workshops"}</span>
+                <span>{getLocalizedText(lang, "الحجز المباشر", "Direct Booking", "Direkte Buchung")}</span>
+                <span>{getLocalizedText(lang, "الباقات التدريبية", "Coaching Packages", "Coaching-Pakete")}</span>
+                <span>{getLocalizedText(lang, "طرق الدفع", "Payment Methods", "Zahlungsmethoden")}</span>
+                <span>{getLocalizedText(lang, "خدمة العملاء", "Client Support", "Kundensupport")}</span>
               </div>
             </div>
 
@@ -1575,7 +2314,7 @@ export default function Booking() {
                   <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 10 }}>{t.followUs}</div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <a
-                      href={INSTAGRAM_LINK}
+                      href={siteSettings.instagramLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1595,7 +2334,7 @@ export default function Booking() {
                     </a>
 
                     <a
-                      href={FACEBOOK_LINK}
+                      href={siteSettings.facebookLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1615,7 +2354,7 @@ export default function Booking() {
                     </a>
 
                     <a
-                      href={TIKTOK_LINK}
+                      href={siteSettings.tiktokLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1635,7 +2374,7 @@ export default function Booking() {
                     </a>
 
                     <a
-                      href={isAr ? WHATSAPP_URL_AR : WHATSAPP_URL}
+                      href={whatsappLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1665,29 +2404,70 @@ export default function Booking() {
               paddingTop: 18,
               display: "flex",
               justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "wrap",
               alignItems: "center",
+              flexDirection: "row",
+              gap: 14,
+              color: colors.textMuted,
+              fontSize: 13,
+              flexWrap: "wrap",
             }}
           >
-            <div style={{ color: colors.textMuted, fontSize: 13 }}>
-              {t.rights}
-            </div>
+            <span>{t.rights}</span>
 
             <div
               style={{
                 display: "flex",
-                gap: 14,
-                flexWrap: "wrap",
                 alignItems: "center",
-                color: colors.textMuted,
-                fontSize: 13,
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 20,
+                background: `linear-gradient(135deg, ${colors.goldSoft}, rgba(255,255,255,0.02))`,
+                border: `1px solid ${colors.border}`,
+                boxShadow: colors.glow,
               }}
             >
-              <span>{t.premium}</span>
-              <span>•</span>
-              <span>{t.directWhatsApp}</span>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700 }}>
+                  {getLocalizedText(lang, "تم التطوير بواسطة", "Developed by", "Entwickelt von")}
+                </span>
+                <span style={{ color: colors.gold, fontWeight: 900, fontSize: 15 }}>
+                  {siteSettings.developerName || defaultSiteSettings.developerName}
+                </span>
+                <span style={{ color: colors.textMuted, fontSize: 12 }}>
+                  {getLocalizedText(lang, "برمجة وتطوير واجهات", "Frontend & Web Development", "Frontend- & Webentwicklung")}
+                </span>
+              </div>
+
+              <a
+                href={developerWhatsapp}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  textDecoration: "none",
+                  color: "#111",
+                  fontWeight: 900,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "11px 16px",
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, #25D366, #53df87)",
+                  boxShadow: "0 10px 24px rgba(37,211,102,0.22)",
+                }}
+              >
+                <MessageCircle size={16} />
+                {getLocalizedText(lang, "واتساب المطور", "Developer WhatsApp", "WhatsApp des Entwicklers")}
+              </a>
             </div>
+
+            <span>{t.premium}</span>
           </div>
         </div>
       </footer>

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { NavLink } from "react-router-dom";
 import {
   Instagram,
@@ -28,11 +34,527 @@ import {
   X,
   ArrowLeft,
   ArrowRight,
+  Play,
+  ExternalLink,
+  Mic2,
+  Tv,
 } from "lucide-react";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { ROUTE_PATHS } from "@/lib/index";
+import { db } from "@/lib/firebase";
 
-type Lang = "ar" | "en";
+type Lang = "ar" | "en" | "de";
 type ThemeMode = "dark" | "light";
+
+type SiteSettings = {
+  whatsappNumber: string;
+  whatsappMessageAr: string;
+  facebookLink: string;
+  instagramLink: string;
+  tiktokLink: string;
+  developerName: string;
+  developerPhone: string;
+  developerWhatsAppMessage: string;
+};
+
+type AboutContent = {
+  pageTitleAr: string;
+  pageTitleEn: string;
+  pageTitleDe: string;
+
+  introTitleAr: string;
+  introTitleEn: string;
+  introTitleDe: string;
+
+  introTextAr: string;
+  introTextEn: string;
+  introTextDe: string;
+
+  overviewTitleAr: string;
+  overviewTitleEn: string;
+  overviewTitleDe: string;
+
+  overviewText1Ar: string;
+  overviewText1En: string;
+  overviewText1De: string;
+
+  overviewText2Ar: string;
+  overviewText2En: string;
+  overviewText2De: string;
+
+  highlightsTitleAr: string;
+  highlightsTitleEn: string;
+  highlightsTitleDe: string;
+
+  rolesTitleAr: string;
+  rolesTitleEn: string;
+  rolesTitleDe: string;
+
+  servicesTitleAr: string;
+  servicesTitleEn: string;
+  servicesTitleDe: string;
+
+  certificatesTitleAr: string;
+  certificatesTitleEn: string;
+  certificatesTitleDe: string;
+
+  featuredTitleAr: string;
+  featuredTitleEn: string;
+  featuredTitleDe: string;
+
+  mediaTitleAr: string;
+  mediaTitleEn: string;
+  mediaTitleDe: string;
+
+  mediaSubAr: string;
+  mediaSubEn: string;
+  mediaSubDe: string;
+
+  galleryTitleAr: string;
+  galleryTitleEn: string;
+  galleryTitleDe: string;
+
+  finalTitleAr: string;
+  finalTitleEn: string;
+  finalTitleDe: string;
+
+  finalTextAr: string;
+  finalTextEn: string;
+  finalTextDe: string;
+
+  footerTextAr: string;
+  footerTextEn: string;
+  footerTextDe: string;
+};
+
+type HighlightItem = {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  titleDe: string;
+  icon:
+    | "award"
+    | "users"
+    | "trophy"
+    | "building"
+    | "chart"
+    | "target"
+    | "graduation"
+    | "plane";
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type RoleItem = {
+  id: string;
+  textAr: string;
+  textEn: string;
+  textDe: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type ServiceItem = {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  titleDe: string;
+  descAr: string;
+  descEn: string;
+  descDe: string;
+  icon:
+    | "dumbbell"
+    | "heart"
+    | "trophy"
+    | "shield"
+    | "book"
+    | "users"
+    | "briefcase";
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type CertificateGroup = {
+  id: string;
+  groupAr: string;
+  groupEn: string;
+  groupDe: string;
+  itemsAr: string[];
+  itemsEn: string[];
+  itemsDe: string[];
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type StoryItem = {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  titleDe: string;
+  textAr: string;
+  textEn: string;
+  textDe: string;
+  icon: "crown" | "dumbbell" | "medal";
+  images: string[];
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type MediaItem = {
+  id: string;
+  url: string;
+  youtubeId: string;
+  type: "tv" | "podcast";
+  titleAr: string;
+  titleEn: string;
+  titleDe: string;
+  textAr: string;
+  textEn: string;
+  textDe: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type GalleryImageItem = {
+  id: string;
+  imageUrl: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+const defaultSiteSettings: SiteSettings = {
+  whatsappNumber: "201027570204",
+  whatsappMessageAr: "مرحبا، أريد الاستفسار عن البرامج التدريبية والحجز",
+  facebookLink: "https://www.facebook.com/share/1DTjxnAxVL/?mibextid=wwXIfr",
+  instagramLink:
+    "https://www.instagram.com/dr.ashraf_el_abd?igsh=c2tpamFreXFuaGI%3D&utm_source=qr",
+  tiktokLink: "https://www.tiktok.com/@dr..ashraf.el.abd?_r=1&_t=ZS-95g5Q6SZ8zp",
+  developerName: "المهندس عمرو خالد",
+  developerPhone: "201008454029",
+  developerWhatsAppMessage: "مرحبًا، أريد الاستفسار بخصوص تطوير الموقع",
+};
+
+const defaultAboutContent: AboutContent = {
+  pageTitleAr: "نبذة عن د. أشرف العبد",
+  pageTitleEn: "About Dr. Ashraf El Abd",
+  pageTitleDe: "Über Dr. Ashraf El Abd",
+
+  introTitleAr: "تعريف مختصر",
+  introTitleEn: "Quick Introduction",
+  introTitleDe: "Kurze Vorstellung",
+
+  introTextAr:
+    "د. أشرف العبد خبير في التدريب والتغذية والإدارة الرياضية بخبرة تتجاوز 15 سنة، ويجمع بين الإدارة، التدريب الاحترافي، التأهيل، والتعليم والمحاضرات الأكاديمية.",
+  introTextEn:
+    "Dr. Ashraf El Abd is a coaching, nutrition, and sports operations expert with 15+ years of experience, combining management, elite coaching, rehabilitation, and academic lecturing.",
+  introTextDe:
+    "Dr. Ashraf El Abd ist Experte für Coaching, Ernährung und Sportmanagement mit über 15 Jahren Erfahrung und verbindet Management, professionelles Coaching, Rehabilitation und akademische Lehre.",
+
+  overviewTitleAr: "من هو د. أشرف؟",
+  overviewTitleEn: "Who Is Dr. Ashraf?",
+  overviewTitleDe: "Wer ist Dr. Ashraf?",
+
+  overviewText1Ar:
+    "د. أشرف العبد يعمل كمدير تشغيل وإدارة لعدة فروع جيم، ومدرب محترف، ومحاضر أكاديمي، وحكم دولي IFBB، وله خبرة قوية في بناء الأنظمة التدريبية، رفع كفاءة الفرق، وتحقيق نمو فعلي في الأداء، العضويات، والمبيعات.",
+  overviewText1En:
+    "Dr. Ashraf El Abd works as a multi-branch gym operations leader, professional coach, academic lecturer, and IFBB International Judge, with strong expertise in coaching systems, team performance, and measurable growth.",
+  overviewText1De:
+    "Dr. Ashraf El Abd arbeitet als Leiter für den Betrieb mehrerer Fitnessstudio-Filialen, professioneller Coach, akademischer Dozent und internationaler IFBB-Kampfrichter mit starker Erfahrung in Trainingssystemen, Teamleistung und messbarem Wachstum.",
+
+  overviewText2Ar:
+    "قاد 4 فروع جيم تضم أكثر من 7000 عضو نشط، وحقق نمو عضويات بنسبة 54% وزيادة سنوية في الربح بنسبة 32%، كما ساعد أكثر من 500 عميل على تحقيق نتائج حقيقية، وشارك في إعداد وتطوير المدربين والمحاضرات المتخصصة داخل المجال.",
+  overviewText2En:
+    "He led 4 gym branches serving 7,000+ active members, achieved 54% membership growth and a 32% annual profit increase, helped 500+ clients reach real results, and contributed to trainer development and specialized education.",
+  overviewText2De:
+    "Er leitete 4 Fitnessstudio-Filialen mit über 7.000 aktiven Mitgliedern, erzielte 54 % Mitgliederwachstum und 32 % jährliche Gewinnsteigerung, half mehr als 500 Kunden zu echten Ergebnissen und trug zur Entwicklung von Trainern und Fachschulungen bei.",
+
+  highlightsTitleAr: "أبرز النقاط",
+  highlightsTitleEn: "Key Highlights",
+  highlightsTitleDe: "Wichtige Highlights",
+
+  rolesTitleAr: "الأدوار والخبرة",
+  rolesTitleEn: "Roles & Experience",
+  rolesTitleDe: "Rollen & Erfahrung",
+
+  servicesTitleAr: "الخدمات التي يقدمها",
+  servicesTitleEn: "Services Offered",
+  servicesTitleDe: "Angebotene Leistungen",
+
+  certificatesTitleAr: "المؤهلات والشهادات",
+  certificatesTitleEn: "Education & Certifications",
+  certificatesTitleDe: "Ausbildung & Zertifikate",
+
+  featuredTitleAr: "رحلة مهنية متكاملة",
+  featuredTitleEn: "A Complete Professional Journey",
+  featuredTitleDe: "Eine vollständige berufliche Laufbahn",
+
+  mediaTitleAr: "الظهور الإعلامي",
+  mediaTitleEn: "Media Appearances",
+  mediaTitleDe: "Medienauftritte",
+
+  mediaSubAr:
+    "لقاءات تلفزيونية وبودكاست تعكس الحضور الإعلامي والخبرة المهنية للكابتن.",
+  mediaSubEn:
+    "TV interviews and podcast appearances that highlight the captain's media presence and professional expertise.",
+  mediaSubDe:
+    "TV-Interviews und Podcast-Auftritte, die die Medienpräsenz und berufliche Expertise des Captains zeigen.",
+
+  galleryTitleAr: "صور للكابتن",
+  galleryTitleEn: "Captain Gallery",
+  galleryTitleDe: "Galerie des Captains",
+
+  finalTitleAr: "جاهز تبدأ التغيير؟",
+  finalTitleEn: "Ready To Transform?",
+  finalTitleDe: "Bereit für die Veränderung?",
+
+  finalTextAr:
+    "ابدأ محادثتك الآن، واعرف القسم المناسب لك، وخطوتك الأولى.",
+  finalTextEn:
+    "Start your conversation now, discover the right section for you, and take your first step.",
+  finalTextDe:
+    "Starte jetzt dein Gespräch, entdecke den passenden Bereich für dich und mache deinen ersten Schritt.",
+
+  footerTextAr: "جميع الحجوزات والاستفسارات تتم مباشرة عبر واتساب.",
+  footerTextEn:
+    "All bookings and inquiries are handled directly through WhatsApp.",
+  footerTextDe:
+    "Alle Buchungen und Anfragen werden direkt über WhatsApp abgewickelt.",
+};
+
+const fallbackHighlights: HighlightItem[] = [
+  {
+    id: "1",
+    titleAr: "15+ سنة خبرة فعلية",
+    titleEn: "15+ Years of Real Experience",
+    titleDe: "15+ Jahre echte Erfahrung",
+    icon: "award",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "2",
+    titleAr: "500+ عميل بنتائج حقيقية",
+    titleEn: "500+ Clients with Real Results",
+    titleDe: "500+ Kunden mit echten Ergebnissen",
+    icon: "users",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "3",
+    titleAr: "حكم دولي IFBB",
+    titleEn: "IFBB International Judge",
+    titleDe: "Internationaler IFBB-Kampfrichter",
+    icon: "trophy",
+    sortOrder: 3,
+    isActive: true,
+  },
+  {
+    id: "4",
+    titleAr: "إدارة 4 فروع جيم",
+    titleEn: "Managed 4 Gym Branches",
+    titleDe: "Leitung von 4 Fitnessstudio-Filialen",
+    icon: "building",
+    sortOrder: 4,
+    isActive: true,
+  },
+];
+
+const fallbackRoles: RoleItem[] = [
+  {
+    id: "1",
+    textAr: "خبرة تتجاوز 15 سنة في التدريب والتغذية والإدارة الرياضية",
+    textEn: "15+ years of experience in coaching, nutrition, and sports operations",
+    textDe: "Über 15 Jahre Erfahrung in Coaching, Ernährung und Sportmanagement",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "2",
+    textAr: "General Manager لـ Add Fit Fitness Club و Seven Day Gym",
+    textEn: "General Manager of Add Fit Fitness Club and Seven Day Gym",
+    textDe: "General Manager von Add Fit Fitness Club und Seven Day Gym",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "3",
+    textAr: "مدير سابق في Gold’s Gym Pyramids View",
+    textEn: "Former Fitness Manager at Gold’s Gym Pyramids View",
+    textDe: "Ehemaliger Fitness Manager bei Gold’s Gym Pyramids View",
+    sortOrder: 3,
+    isActive: true,
+  },
+];
+
+const fallbackServices: ServiceItem[] = [
+  {
+    id: "1",
+    titleAr: "التدريب الأونلاين",
+    titleEn: "Online Coaching",
+    titleDe: "Online-Coaching",
+    descAr: "برامج تدريب فردية حسب الهدف والمستوى والحالة البدنية.",
+    descEn: "Personalized coaching plans based on goals, level, and condition.",
+    descDe: "Individuelle Coaching-Pläne nach Ziel, Niveau und körperlichem Zustand.",
+    icon: "dumbbell",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "2",
+    titleAr: "برامج التغذية",
+    titleEn: "Nutrition Programs",
+    titleDe: "Ernährungsprogramme",
+    descAr: "تخسيس، زيادة وزن، بناء عضلات، ومقاومة الإنسولين.",
+    descEn: "Fat loss, weight gain, muscle building, and insulin resistance support.",
+    descDe: "Fettabbau, Gewichtszunahme, Muskelaufbau und Unterstützung bei Insulinresistenz.",
+    icon: "heart",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    id: "3",
+    titleAr: "تحضير البطولات",
+    titleEn: "Competition Prep",
+    titleDe: "Wettkampfvorbereitung",
+    descAr: "تحضير اللاعبين للمنافسات والبطولات بأعلى جاهزية.",
+    descEn: "Athlete preparation for contests and competitions.",
+    descDe: "Vorbereitung von Athleten auf Wettkämpfe und Meisterschaften.",
+    icon: "trophy",
+    sortOrder: 3,
+    isActive: true,
+  },
+];
+
+const fallbackCertificates: CertificateGroup[] = [
+  {
+    id: "1",
+    groupAr: "المؤهلات العلمية",
+    groupEn: "Education",
+    groupDe: "Ausbildung",
+    itemsAr: [
+      "دكتوراه في التربية الرياضية – 2025",
+      "ماجستير تغذية وتدريب رياضي – 2021",
+      "MBA – 2018",
+    ],
+    itemsEn: [
+      "PhD in Sports Education – 2025",
+      "Master of Science in Nutrition and Sports Training – 2021",
+      "MBA – 2018",
+    ],
+    itemsDe: [
+      "Promotion in Sportpädagogik – 2025",
+      "Master in Ernährung und Sporttraining – 2021",
+      "MBA – 2018",
+    ],
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "2",
+    groupAr: "الشهادات المهنية",
+    groupEn: "Professional Certifications",
+    groupDe: "Berufliche Zertifikate",
+    itemsAr: [
+      "IFBB International Judge – 2024",
+      "ISSA Certified Fitness Management",
+      "Certified Rehabilitation Specialist",
+    ],
+    itemsEn: [
+      "IFBB International Judge – 2024",
+      "ISSA Certified Fitness Management",
+      "Certified Rehabilitation Specialist",
+    ],
+    itemsDe: [
+      "IFBB International Judge – 2024",
+      "ISSA Certified Fitness Management",
+      "Zertifizierter Rehabilitationsspezialist",
+    ],
+    sortOrder: 2,
+    isActive: true,
+  },
+];
+
+const fallbackStories: StoryItem[] = [
+  {
+    id: "1",
+    titleAr: "حكم دولي IFBB",
+    titleEn: "IFBB International Judge",
+    titleDe: "Internationaler IFBB-Kampfrichter",
+    textAr:
+      "يشغل د. أشرف دورًا مهمًا في التحكيم الرياضي على مستوى البطولات المحلية والدولية.",
+    textEn:
+      "Dr. Ashraf plays a major judging role in national and international championships.",
+    textDe:
+      "Dr. Ashraf übernimmt eine bedeutende Rolle als Kampfrichter auf nationaler und internationaler Ebene.",
+    icon: "crown",
+    images: ["/IMAGE/judg4.jpg", "/IMAGE/judge-2.jpg", "/IMAGE/judge-3.jpg"],
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "2",
+    titleAr: "مدرب برايفت وصانع نتائج",
+    titleEn: "Private Coach & Results Builder",
+    titleDe: "Privatcoach & Ergebnismacher",
+    textAr:
+      "خبرة قوية في تصميم برامج فردية تساعد العملاء على الوصول لنتائج واضحة ومستقرة.",
+    textEn:
+      "Strong experience in building personalized programs that help clients reach visible and stable results.",
+    textDe:
+      "Große Erfahrung in der Erstellung individueller Programme mit sichtbaren und stabilen Ergebnissen.",
+    icon: "dumbbell",
+    images: ["/IMAGE/private-1.jpeg", "/IMAGE/private-2.jpeg", "/IMAGE/private-3.jpeg"],
+    sortOrder: 2,
+    isActive: true,
+  },
+];
+
+const fallbackMedia: MediaItem[] = [
+  {
+    id: "1",
+    url: "https://youtu.be/AuNPOkFu5fI?si=VUrukhq_xb-l11hG",
+    youtubeId: "AuNPOkFu5fI",
+    type: "tv",
+    titleAr: "ظهور فضائي ومداخلة إعلامية",
+    titleEn: "TV Appearance & Media Interview",
+    titleDe: "TV-Auftritt & Medieninterview",
+    textAr:
+      "حلقة تعكس الحضور الإعلامي للكابتن وتبرز خبرته داخل المجال الرياضي والتدريبي.",
+    textEn:
+      "An episode that reflects the captain's media presence and highlights his expertise in the fitness field.",
+    textDe:
+      "Eine Episode, die die Medienpräsenz des Captains widerspiegelt und seine Expertise im Fitnessbereich zeigt.",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "2",
+    url: "https://youtu.be/3vdvbr0nPYI?si=6mqIIuR0Ux-jGujb",
+    youtubeId: "3vdvbr0nPYI",
+    type: "podcast",
+    titleAr: "بودكاست وحوار متخصص",
+    titleEn: "Podcast & Expert Conversation",
+    titleDe: "Podcast & Fachgespräch",
+    textAr:
+      "محتوى حواري يبرز خبرة الكابتن بشكل أعمق ويعكس أسلوبه العملي والعلمي.",
+    textEn:
+      "A conversation piece that presents the captain's experience in more depth.",
+    textDe:
+      "Ein Gesprächsformat, das die Erfahrung des Captains tiefer zeigt.",
+    sortOrder: 2,
+    isActive: true,
+  },
+];
+
+const fallbackGallery: GalleryImageItem[] = [
+  { id: "1", imageUrl: "/IMAGE/dr3.jpeg", sortOrder: 1, isActive: true },
+  { id: "2", imageUrl: "/IMAGE/dr2.jpg", sortOrder: 2, isActive: true },
+  { id: "3", imageUrl: "/IMAGE/dr3.jpg", sortOrder: 3, isActive: true },
+  { id: "4", imageUrl: "/IMAGE/t1.jpeg", sortOrder: 4, isActive: true },
+  { id: "5", imageUrl: "/IMAGE/t2.jpeg", sortOrder: 5, isActive: true },
+  { id: "6", imageUrl: "/IMAGE/t3.jpeg", sortOrder: 6, isActive: true },
+];
 
 function FacebookIcon({ size = 18 }: { size?: number }) {
   return (
@@ -99,8 +621,8 @@ function HoverCard({
   style,
   className = "",
 }: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
+  children: ReactNode;
+  style?: CSSProperties;
   className?: string;
 }) {
   return (
@@ -119,7 +641,7 @@ function SocialLinkCard({
   accentColor,
 }: {
   href: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   subtitle: string;
   accentColor: string;
@@ -134,7 +656,7 @@ function SocialLinkCard({
 }) {
   return (
     <a
-      href={href}
+      href={href || "#"}
       target="_blank"
       rel="noopener noreferrer"
       className="lift-card"
@@ -176,9 +698,83 @@ function SocialLinkCard({
   );
 }
 
+function localize(lang: Lang, ar?: string, en?: string, de?: string, fallback = "") {
+  if (lang === "ar") return ar || fallback;
+  if (lang === "en") return en || ar || fallback;
+  return de || en || ar || fallback;
+}
+
+function getHighlightIcon(icon: HighlightItem["icon"]) {
+  switch (icon) {
+    case "award":
+      return <Award size={18} />;
+    case "users":
+      return <Users size={18} />;
+    case "trophy":
+      return <Trophy size={18} />;
+    case "building":
+      return <Building2 size={18} />;
+    case "chart":
+      return <BarChart3 size={18} />;
+    case "target":
+      return <Target size={18} />;
+    case "graduation":
+      return <GraduationCap size={18} />;
+    case "plane":
+      return <Plane size={18} />;
+    default:
+      return <Star size={18} />;
+  }
+}
+
+function getServiceIcon(icon: ServiceItem["icon"]) {
+  switch (icon) {
+    case "dumbbell":
+      return <Dumbbell size={18} />;
+    case "heart":
+      return <HeartPulse size={18} />;
+    case "trophy":
+      return <Trophy size={18} />;
+    case "shield":
+      return <ShieldCheck size={18} />;
+    case "book":
+      return <BookOpen size={18} />;
+    case "users":
+      return <Users size={18} />;
+    case "briefcase":
+      return <Briefcase size={18} />;
+    default:
+      return <Dumbbell size={18} />;
+  }
+}
+
+function getStoryIcon(icon: StoryItem["icon"]) {
+  switch (icon) {
+    case "crown":
+      return <Crown size={18} />;
+    case "dumbbell":
+      return <Dumbbell size={18} />;
+    case "medal":
+      return <Medal size={18} />;
+    default:
+      return <Star size={18} />;
+  }
+}
+
 export default function About() {
   const [lang, setLang] = useState<Lang>("ar");
   const [theme, setTheme] = useState<ThemeMode>("dark");
+
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+  const [aboutContent, setAboutContent] = useState<AboutContent>(defaultAboutContent);
+
+  const [highlights, setHighlights] = useState<HighlightItem[]>([]);
+  const [roles, setRoles] = useState<RoleItem[]>([]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [certificates, setCertificates] = useState<CertificateGroup[]>([]);
+  const [stories, setStories] = useState<StoryItem[]>([]);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [galleryImages, setGalleryImages] = useState<GalleryImageItem[]>([]);
 
   const [lightbox, setLightbox] = useState<{
     images: string[];
@@ -187,24 +783,138 @@ export default function About() {
   } | null>(null);
 
   const isAr = lang === "ar";
+  const isEn = lang === "en";
   const isDark = theme === "dark";
 
-  const PHONE = "201027570204";
-  const WHATSAPP_LINK = `https://wa.me/${PHONE}?text=${encodeURIComponent(
-    isAr
-      ? "مرحبا، أريد الاستفسار عن البرامج التدريبية والحجز"
-      : "Hello, I want to ask about the coaching programs and booking"
-  )}`;
+  useEffect(() => {
+    const unsubSettings = onSnapshot(
+      doc(db, "siteContent", "settings"),
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+        setSiteSettings({
+          ...defaultSiteSettings,
+          ...(snapshot.data() as Partial<SiteSettings>),
+        });
+      },
+      () => {}
+    );
 
-  const FACEBOOK_LINK = "https://www.facebook.com/share/1DTjxnAxVL/?mibextid=wwXIfr";
-  const INSTAGRAM_LINK =
-    "https://www.instagram.com/dr.ashraf_el_abd?igsh=c2tpamFreXFuaGI%3D&utm_source=qr";
-  const TIKTOK_LINK = "https://www.tiktok.com/@dr..ashraf.el.abd?_r=1&_t=ZS-95g5Q6SZ8zp";
+    const unsubAboutContent = onSnapshot(
+      doc(db, "siteContent", "about"),
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+        setAboutContent({
+          ...defaultAboutContent,
+          ...(snapshot.data() as Partial<AboutContent>),
+        });
+      },
+      () => {}
+    );
 
-  const HOME_PATH = ROUTE_PATHS?.HOME ?? "/";
-  const ABOUT_PATH = ROUTE_PATHS?.ABOUT ?? "/about";
-  const SERVICES_PATH = ROUTE_PATHS?.SERVICES ?? "/services";
-  const CONTACT_PATH = "#contact";
+    const unsubHighlights = onSnapshot(
+      collection(db, "aboutHighlights"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<HighlightItem, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setHighlights(data);
+      },
+      () => {}
+    );
+
+    const unsubRoles = onSnapshot(
+      collection(db, "aboutRoles"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<RoleItem, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setRoles(data);
+      },
+      () => {}
+    );
+
+    const unsubServices = onSnapshot(
+      collection(db, "aboutServices"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<ServiceItem, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setServices(data);
+      },
+      () => {}
+    );
+
+    const unsubCertificates = onSnapshot(
+      collection(db, "aboutCertificates"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<CertificateGroup, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setCertificates(data);
+      },
+      () => {}
+    );
+
+    const unsubStories = onSnapshot(
+      collection(db, "aboutStories"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<StoryItem, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setStories(data);
+      },
+      () => {}
+    );
+
+    const unsubMedia = onSnapshot(
+      collection(db, "aboutMedia"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<MediaItem, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setMediaItems(data);
+      },
+      () => {}
+    );
+
+    const unsubGallery = onSnapshot(
+      collection(db, "aboutGallery"),
+      (snapshot) => {
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<GalleryImageItem, "id">) }))
+          .filter((item) => item.isActive !== false)
+          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setGalleryImages(data);
+      },
+      () => {}
+    );
+
+    return () => {
+      unsubSettings();
+      unsubAboutContent();
+      unsubHighlights();
+      unsubRoles();
+      unsubServices();
+      unsubCertificates();
+      unsubStories();
+      unsubMedia();
+      unsubGallery();
+    };
+  }, []);
+
+  const liveHighlights = highlights.length ? highlights : fallbackHighlights;
+  const liveRoles = roles.length ? roles : fallbackRoles;
+  const liveServices = services.length ? services : fallbackServices;
+  const liveCertificates = certificates.length ? certificates : fallbackCertificates;
+  const liveStories = stories.length ? stories : fallbackStories;
+  const liveMedia = mediaItems.length ? mediaItems : fallbackMedia;
+  const liveGallery = galleryImages.length ? galleryImages : fallbackGallery;
 
   const colors = useMemo(
     () => ({
@@ -224,7 +934,6 @@ export default function About() {
       glow: isDark
         ? "0 0 0 1px rgba(212,166,63,0.08), 0 24px 60px rgba(0,0,0,0.34)"
         : "0 0 0 1px rgba(212,166,63,0.16), 0 18px 45px rgba(0,0,0,0.08)",
-      accent: isDark ? "#25D366" : "#1ea952",
       headerBg: isDark ? "rgba(6,8,12,0.82)" : "rgba(255,255,255,0.86)",
       footerTop: isDark ? "#0d1117" : "#fbf7ef",
       footerBottom: isDark ? "#080b10" : "#f2eadc",
@@ -237,220 +946,216 @@ export default function About() {
     [isDark]
   );
 
+  const whatsappLink = useMemo(
+    () =>
+      `https://wa.me/${siteSettings.whatsappNumber}?text=${encodeURIComponent(
+        siteSettings.whatsappMessageAr || defaultSiteSettings.whatsappMessageAr
+      )}`,
+    [siteSettings]
+  );
+
+  const developerWhatsapp = useMemo(
+    () =>
+      `https://wa.me/${siteSettings.developerPhone}?text=${encodeURIComponent(
+        siteSettings.developerWhatsAppMessage || defaultSiteSettings.developerWhatsAppMessage
+      )}`,
+    [siteSettings]
+  );
+
   const t = useMemo(
     () => ({
-      pageTitle: isAr ? "نبذة عن د. أشرف العبد" : "About Dr. Ashraf El Abd",
-      introTitle: isAr ? "تعريف مختصر" : "Quick Introduction",
-      introText: isAr
-        ? "د. أشرف العبد خبير في التدريب والتغذية والإدارة الرياضية بخبرة تتجاوز 15 سنة، ويجمع بين الإدارة، التدريب الاحترافي، التأهيل، والتعليم والمحاضرات الأكاديمية."
-        : "Dr. Ashraf El Abd is a coaching, nutrition, and sports operations expert with 15+ years of experience, combining management, elite coaching, rehabilitation, and academic lecturing.",
+      pageTitle: localize(
+        lang,
+        aboutContent.pageTitleAr,
+        aboutContent.pageTitleEn,
+        aboutContent.pageTitleDe,
+        defaultAboutContent.pageTitleAr
+      ),
+      introTitle: localize(
+        lang,
+        aboutContent.introTitleAr,
+        aboutContent.introTitleEn,
+        aboutContent.introTitleDe,
+        defaultAboutContent.introTitleAr
+      ),
+      introText: localize(
+        lang,
+        aboutContent.introTextAr,
+        aboutContent.introTextEn,
+        aboutContent.introTextDe,
+        defaultAboutContent.introTextAr
+      ),
 
-      overviewTitle: isAr ? "من هو د. أشرف؟" : "Who Is Dr. Ashraf?",
-      overviewText1: isAr
-        ? "د. أشرف العبد يعمل كمدير تشغيل وإدارة لعدة فروع جيم، ومدرب محترف، ومحاضر أكاديمي، وحكم دولي IFBB، وله خبرة قوية في بناء الأنظمة التدريبية، رفع كفاءة الفرق، وتحقيق نمو فعلي في الأداء، العضويات، والمبيعات."
-        : "Dr. Ashraf El Abd works as a multi-branch gym operations leader, professional coach, academic lecturer, and IFBB International Judge, with strong expertise in coaching systems, team performance, and measurable growth.",
-      overviewText2: isAr
-        ? "قاد 4 فروع جيم تضم أكثر من 7000 عضو نشط، وحقق نمو عضويات بنسبة 54% وزيادة سنوية في الربح بنسبة 32%، كما ساعد أكثر من 500 عميل على تحقيق نتائج حقيقية، وشارك في إعداد وتطوير المدربين والمحاضرات المتخصصة داخل المجال."
-        : "He led 4 gym branches serving 7,000+ active members, achieved 54% membership growth and a 32% annual profit increase, helped 500+ clients reach real results, and contributed to trainer development and specialized education.",
+      overviewTitle: localize(
+        lang,
+        aboutContent.overviewTitleAr,
+        aboutContent.overviewTitleEn,
+        aboutContent.overviewTitleDe,
+        defaultAboutContent.overviewTitleAr
+      ),
+      overviewText1: localize(
+        lang,
+        aboutContent.overviewText1Ar,
+        aboutContent.overviewText1En,
+        aboutContent.overviewText1De,
+        defaultAboutContent.overviewText1Ar
+      ),
+      overviewText2: localize(
+        lang,
+        aboutContent.overviewText2Ar,
+        aboutContent.overviewText2En,
+        aboutContent.overviewText2De,
+        defaultAboutContent.overviewText2Ar
+      ),
 
-      highlightsTitle: isAr ? "أبرز النقاط" : "Key Highlights",
-      rolesTitle: isAr ? "الأدوار والخبرة" : "Roles & Experience",
-      servicesTitle: isAr ? "الخدمات التي يقدمها" : "Services Offered",
-      certificatesTitle: isAr ? "المؤهلات والشهادات" : "Education & Certifications",
-      featuredTitle: isAr ? "رحلة مهنية متكاملة" : "A Complete Professional Journey",
-      galleryTitle: isAr ? "صور للكابتن" : "Captain Gallery",
-      socialTitle: isAr ? "تابعنا" : "Follow Us",
-      footerText: isAr
-        ? "جميع الحجوزات والاستفسارات تتم مباشرة عبر واتساب."
-        : "All bookings and inquiries are handled directly through WhatsApp.",
+      highlightsTitle: localize(
+        lang,
+        aboutContent.highlightsTitleAr,
+        aboutContent.highlightsTitleEn,
+        aboutContent.highlightsTitleDe,
+        defaultAboutContent.highlightsTitleAr
+      ),
+      rolesTitle: localize(
+        lang,
+        aboutContent.rolesTitleAr,
+        aboutContent.rolesTitleEn,
+        aboutContent.rolesTitleDe,
+        defaultAboutContent.rolesTitleAr
+      ),
+      servicesTitle: localize(
+        lang,
+        aboutContent.servicesTitleAr,
+        aboutContent.servicesTitleEn,
+        aboutContent.servicesTitleDe,
+        defaultAboutContent.servicesTitleAr
+      ),
+      certificatesTitle: localize(
+        lang,
+        aboutContent.certificatesTitleAr,
+        aboutContent.certificatesTitleEn,
+        aboutContent.certificatesTitleDe,
+        defaultAboutContent.certificatesTitleAr
+      ),
+      featuredTitle: localize(
+        lang,
+        aboutContent.featuredTitleAr,
+        aboutContent.featuredTitleEn,
+        aboutContent.featuredTitleDe,
+        defaultAboutContent.featuredTitleAr
+      ),
+      mediaTitle: localize(
+        lang,
+        aboutContent.mediaTitleAr,
+        aboutContent.mediaTitleEn,
+        aboutContent.mediaTitleDe,
+        defaultAboutContent.mediaTitleAr
+      ),
+      mediaSub: localize(
+        lang,
+        aboutContent.mediaSubAr,
+        aboutContent.mediaSubEn,
+        aboutContent.mediaSubDe,
+        defaultAboutContent.mediaSubAr
+      ),
+      galleryTitle: localize(
+        lang,
+        aboutContent.galleryTitleAr,
+        aboutContent.galleryTitleEn,
+        aboutContent.galleryTitleDe,
+        defaultAboutContent.galleryTitleAr
+      ),
+      finalTitle: localize(
+        lang,
+        aboutContent.finalTitleAr,
+        aboutContent.finalTitleEn,
+        aboutContent.finalTitleDe,
+        defaultAboutContent.finalTitleAr
+      ),
+      finalText: localize(
+        lang,
+        aboutContent.finalTextAr,
+        aboutContent.finalTextEn,
+        aboutContent.finalTextDe,
+        defaultAboutContent.finalTextAr
+      ),
+      footerText: localize(
+        lang,
+        aboutContent.footerTextAr,
+        aboutContent.footerTextEn,
+        aboutContent.footerTextDe,
+        defaultAboutContent.footerTextAr
+      ),
 
-      bookNow: isAr ? "احجز الآن" : "Book Now",
-      contactWhatsapp: isAr ? "راسلنا الآن" : "Chat on WhatsApp",
-      backHome: isAr ? "العودة للرئيسية" : "Back Home",
-      langBadge: isAr ? "E" : "ع",
-      instagramLabel: isAr ? "إنستجرام" : "Instagram",
-      facebookLabel: isAr ? "فيسبوك" : "Facebook",
-      tiktokLabel: isAr ? "تيك توك" : "TikTok",
-      home: isAr ? "الرئيسية" : "Home",
-      navAbout: isAr ? "نبذة عنا" : "About",
-      navServices: isAr ? "الخدمات" : "Services",
-      navGallery: isAr ? "الصور" : "Gallery",
-      navContact: isAr ? "تواصل" : "Contact",
-      finalTitle: isAr ? "جاهز تبدأ التغيير؟" : "Ready To Transform?",
-      finalText: isAr
-        ? "ابدأ محادثتك الآن، واعرف الخدمة المناسبة لك، وخطوتك الأولى."
-        : "Start your conversation now, discover the best service for you, and get your first step.",
-      finalBtn: isAr ? "احجز استفسارك الآن" : "Book Your Inquiry",
-      knowServices: isAr ? "تعرف على خدماتنا" : "Know Our Services",
-      footerQuick: isAr ? "روابط سريعة" : "Quick Links",
-      footerServices: isAr ? "الخدمات الأساسية" : "Core Services",
-      footerContact: isAr ? "بيانات التواصل" : "Contact Info",
-      footerFollow: isAr ? "تابعنا" : "Follow Us",
-      footerLocation: isAr ? "أونلاين + حجز مباشر عبر واتساب" : "Online + direct WhatsApp booking",
-      footerHours: isAr ? "متابعة وحجز حسب المواعيد المتاحة" : "Booking based on available schedule",
-      brandSub: isAr ? "ONLINE COACH • ELITE TRANSFORMATION" : "ONLINE COACH • ELITE TRANSFORMATION",
-      openImage: isAr ? "عرض الصورة" : "Open Image",
-      close: isAr ? "إغلاق" : "Close",
-      next: isAr ? "التالي" : "Next",
-      prev: isAr ? "السابق" : "Previous",
+      brand: localize(lang, "د. أشرف العبد", "Dr. Ashraf El Abd", "Dr. Ashraf El Abd"),
+      brandSub: "ONLINE COACH • ELITE TRANSFORMATION",
+      home: localize(lang, "الرئيسية", "Home", "Startseite"),
+      navAbout: localize(lang, "نبذة عنا", "About", "Über uns"),
+      navClasses: localize(lang, "الكلاسات", "Classes", "Kurse"),
+      navBooking: localize(lang, "الحجز", "Booking", "Buchung"),
+      navGallery: localize(lang, "الصور", "Gallery", "Galerie"),
+      navContact: localize(lang, "تواصل", "Contact", "Kontakt"),
+
+      bookNow: localize(lang, "احجز الآن", "Book Now", "Jetzt buchen"),
+      contactWhatsapp: localize(lang, "راسلنا الآن", "Chat on WhatsApp", "Jetzt auf WhatsApp schreiben"),
+      backHome: localize(lang, "العودة للرئيسية", "Back Home", "Zur Startseite"),
+      instagramLabel: localize(lang, "إنستجرام", "Instagram", "Instagram"),
+      facebookLabel: localize(lang, "فيسبوك", "Facebook", "Facebook"),
+      tiktokLabel: localize(lang, "تيك توك", "TikTok", "TikTok"),
+      watchEpisode: localize(lang, "شاهد الحلقة", "Watch Episode", "Episode ansehen"),
+      tvLabel: localize(lang, "ظهور فضائي", "TV Appearance", "TV-Auftritt"),
+      podcastLabel: localize(lang, "بودكاست", "Podcast", "Podcast"),
+      finalBtn: localize(lang, "احجز استفسارك الآن", "Book Your Inquiry", "Jetzt anfragen"),
+      knowClasses: localize(lang, "تعرف على الكلاسات", "View Classes", "Kurse ansehen"),
+      footerQuick: localize(lang, "روابط سريعة", "Quick Links", "Schnellzugriffe"),
+      footerServices: localize(lang, "الأقسام الأساسية", "Core Sections", "Kernbereiche"),
+      footerContact: localize(lang, "بيانات التواصل", "Contact Info", "Kontaktinformationen"),
+      footerFollow: localize(lang, "تابعنا", "Follow Us", "Folge uns"),
+      footerLocation: localize(
+        lang,
+        "أونلاين + حجز مباشر عبر واتساب",
+        "Online + direct WhatsApp booking",
+        "Online + direkte Buchung über WhatsApp"
+      ),
+      footerHours: localize(
+        lang,
+        "متابعة وحجز حسب المواعيد المتاحة",
+        "Booking based on available schedule",
+        "Buchung nach verfügbaren Zeiten"
+      ),
+      openImage: localize(lang, "عرض الصورة", "Open Image", "Bild öffnen"),
+      close: localize(lang, "إغلاق", "Close", "Schließen"),
+      next: localize(lang, "التالي", "Next", "Weiter"),
+      prev: localize(lang, "السابق", "Previous", "Zurück"),
+      langArabic: "العربية",
+      langEnglish: "English",
+      langGerman: "Deutsch",
+      themeLight: localize(lang, "فاتح", "Light", "Hell"),
+      themeDark: localize(lang, "ليلي", "Dark", "Dunkel"),
+      rights: localize(
+        lang,
+        "جميع الحقوق محفوظة © د. أشرف العبد",
+        "All rights reserved © Dr. Ashraf El Abd",
+        "Alle Rechte vorbehalten © Dr. Ashraf El Abd"
+      ),
+      footerTag1: localize(lang, "تصميم احترافي", "Premium Experience", "Premium-Erlebnis"),
+      footerTag2: localize(
+        lang,
+        "حجز مباشر عبر واتساب",
+        "Direct WhatsApp Booking",
+        "Direkte WhatsApp-Buchung"
+      ),
+      openNow: localize(lang, "افتح الآن", "Open Now", "Jetzt öffnen"),
+      developerCredit: localize(
+        lang,
+        `تمت البرمجة بواسطة ${siteSettings.developerName || defaultSiteSettings.developerName}`,
+        `Developed by ${siteSettings.developerName || defaultSiteSettings.developerName}`,
+        `Entwickelt von ${siteSettings.developerName || defaultSiteSettings.developerName}`
+      ),
     }),
-    [isAr]
+    [lang, aboutContent, siteSettings]
   );
 
-  const highlights = useMemo(
-    () => [
-      { icon: <Award size={18} />, title: isAr ? "15+ سنة خبرة فعلية" : "15+ Years of Real Experience" },
-      { icon: <Users size={18} />, title: isAr ? "500+ عميل بنتائج حقيقية" : "500+ Clients with Real Results" },
-      { icon: <Trophy size={18} />, title: isAr ? "حكم دولي IFBB" : "IFBB International Judge" },
-      { icon: <Building2 size={18} />, title: isAr ? "إدارة 4 فروع جيم" : "Managed 4 Gym Branches" },
-      { icon: <BarChart3 size={18} />, title: isAr ? "54% نمو في العضويات" : "54% Membership Growth" },
-      { icon: <Target size={18} />, title: isAr ? "32% زيادة أرباح سنوية" : "32% Annual Profit Growth" },
-      { icon: <GraduationCap size={18} />, title: isAr ? "محاضر أكاديمي وإعداد مدربين" : "Academic Lecturer & Trainer Educator" },
-      { icon: <Plane size={18} />, title: isAr ? "سفر لأكثر من دولة حول العالم" : "Travel Across Multiple Countries" },
-    ],
-    [isAr]
-  );
-
-  const roles = useMemo(
-    () => [
-      isAr ? "خبرة تتجاوز 15 سنة في التدريب والتغذية والإدارة الرياضية" : "15+ years of experience in coaching, nutrition, and sports operations",
-      isAr ? "General Manager لـ Add Fit Fitness Club و Seven Day Gym" : "General Manager of Add Fit Fitness Club and Seven Day Gym",
-      isAr ? "مدير لجيم Seven Day ضمن منظومة تشغيل متعددة الفروع" : "Manager of Seven Day Gym within a multi-branch operation system",
-      isAr ? "مدير سابق في Gold’s Gym Pyramids View" : "Former Fitness Manager at Gold’s Gym Pyramids View",
-      isAr ? "إدارة تشغيل 4 فروع مع مسؤولية كاملة عن الأداء والربحية" : "Managed operations across 4 branches with full performance and profit ownership",
-      isAr ? "قيادة أكثر من 100 فرد داخل المنظومة" : "Led 100+ staff members across the network",
-      isAr ? "إدارة وتوجيه أكثر من 30 مدرب وأخصائي تغذية" : "Managed and mentored 30+ trainers and nutritionists",
-      isAr ? "Director & Head Judge بالاتحاد المصري لكمال الأجسام" : "Director and Head Judge at the Egyptian Bodybuilding Federation",
-      isAr ? "تنسيق بطولات وطنية ودولية وفق معايير IFBB" : "Coordinated national and international championships under IFBB standards",
-      isAr ? "محاضر في كلية وداخل المجال الأكاديمي الرياضي" : "Lecturer in a college and within the sports academic field",
-      isAr ? "خبرة قوية في KPI dashboards والتحليل التشغيلي" : "Strong expertise in KPI dashboards and performance analytics",
-      isAr ? "خبرة في التوسع، جدولة الفرق، التشغيل، والمتابعة اليومية" : "Experienced in expansion, scheduling, operations, and daily follow-up",
-      isAr ? "يسافر إلى أكثر من دولة حول العالم للعمل، الإدارة، التحكيم، والتطوير المهني" : "Travels across multiple countries for work, operations, judging, and professional development",
-      isAr ? "بطل قومي لعدة سنوات عبر مسيرة تنافسية مميزة" : "National bodybuilding champion across a long elite competitive career",
-    ],
-    [isAr]
-  );
-
-  const services = useMemo(
-    () => [
-      {
-        icon: <Dumbbell size={18} />,
-        title: isAr ? "التدريب الأونلاين" : "Online Coaching",
-        desc: isAr
-          ? "برامج تدريب فردية حسب الهدف والمستوى والحالة البدنية."
-          : "Personalized coaching plans based on goals, level, and condition.",
-      },
-      {
-        icon: <HeartPulse size={18} />,
-        title: isAr ? "برامج التغذية" : "Nutrition Programs",
-        desc: isAr
-          ? "تخسيس، زيادة وزن، بناء عضلات، ومقاومة الإنسولين."
-          : "Fat loss, weight gain, muscle building, and insulin resistance support.",
-      },
-      {
-        icon: <Trophy size={18} />,
-        title: isAr ? "تحضير البطولات" : "Competition Prep",
-        desc: isAr
-          ? "تحضير اللاعبين للمنافسات والبطولات بأعلى جاهزية."
-          : "Athlete preparation for contests and competitions.",
-      },
-      {
-        icon: <ShieldCheck size={18} />,
-        title: isAr ? "الاستشفاء والحجامة" : "Recovery & Hijama",
-        desc: isAr
-          ? "جلسات مساج رياضي، استشفاء، وحجامة."
-          : "Sports massage, recovery sessions, and hijama.",
-      },
-      {
-        icon: <BookOpen size={18} />,
-        title: isAr ? "الكورسات والورش" : "Courses & Workshops",
-        desc: isAr
-          ? "كورسات وورش أونلاين لتطوير المعرفة والخبرة."
-          : "Online courses and workshops for education and development.",
-      },
-      {
-        icon: <Users size={18} />,
-        title: isAr ? "إعداد المدربين والبوت كامب" : "Trainer Education & Bootcamps",
-        desc: isAr
-          ? "تطوير المدربين والكلاسات الجماعية والبوت كامب."
-          : "Trainer education, group classes, and bootcamps.",
-      },
-      {
-        icon: <Briefcase size={18} />,
-        title: isAr ? "الإدارة الرياضية والاستشارات" : "Fitness Management & Consulting",
-        desc: isAr
-          ? "خبرة عملية في إدارة الجيمات والفرق وتحسين الأداء."
-          : "Practical experience in gym operations, teams, and performance growth.",
-      },
-    ],
-    [isAr]
-  );
-
-  const certificates = useMemo(
-    () => [
-      {
-        group: isAr ? "المؤهلات العلمية" : "Education",
-        items: [
-          isAr ? "دكتوراه في التربية الرياضية – 2025" : "PhD in Sports Education – 2025",
-          isAr ? "ماجستير تغذية وتدريب رياضي – 2021" : "Master of Science in Nutrition and Sports Training – 2021",
-          isAr ? "MBA – 2018" : "Master of Business Administration (MBA) – 2018",
-          isAr ? "دبلومة القيادة – 2017" : "Diploma in Leadership – 2017",
-          isAr ? "بكالوريوس تربية رياضية بتقدير امتياز مع مرتبة الشرف – 2016" : "Bachelor of Physical Education, Excellent with Honors – 2016",
-        ],
-      },
-      {
-        group: isAr ? "الشهادات المهنية" : "Professional Certifications",
-        items: [
-          isAr ? "IFBB International Judge – 2024" : "IFBB International Judge – 2024",
-          isAr ? "ISSA Certified Fitness Management" : "ISSA Certified Fitness Management",
-          isAr ? "Certification for Operation Management" : "Certification for Operation Management",
-          isAr ? "Certified Rehabilitation Specialist" : "Certified Rehabilitation Specialist",
-          isAr ? "ISSA Certified Fitness Trainer" : "ISSA Certified Fitness Trainer",
-          isAr ? "First Aid and Rehabilitation" : "First Aid and Rehabilitation",
-        ],
-      },
-    ],
-    [isAr]
-  );
-
-  const featuredStories = useMemo(
-    () => [
-      {
-        title: isAr ? "حكم دولي IFBB" : "IFBB International Judge",
-        text: isAr
-          ? "يشغل د. أشرف دورًا مهمًا في التحكيم الرياضي على مستوى البطولات، حيث يعمل كرئيس لجنة تحكيم ومدير فني في بطولات محلية ودولية. هذه المكانة تعكس الثقة الكبيرة في خبرته، ودقته في التقييم، والتزامه الكامل بالمعايير الاحترافية والتنظيمية الخاصة بـ IFBB."
-          : "Dr. Ashraf plays a major judging role in bodybuilding championships as a head judge and technical leader in national and international events, reflecting strong trust in his experience, accuracy, and IFBB standards.",
-        images: ["/IMAGE/judg4.jpg", "/IMAGE/judge-2.jpg", "/IMAGE/judge-3.jpg"],
-        icon: <Crown size={18} />,
-      },
-      {
-        title: isAr ? "مدرب برايفت وصانع نتائج" : "Private Coach & Results Builder",
-        text: isAr
-          ? "على مستوى التدريب الفردي، يمتلك خبرة قوية في تصميم برامج مخصصة لكل حالة، سواء كان الهدف خسارة دهون، بناء عضلات، تحسين الأداء، أو إعادة التأهيل. المتابعة تكون عملية، منظمة، ومبنية على تفاصيل فعلية، لذلك قدر يساعد عدد كبير من العملاء في الوصول لنتائج واضحة ومستقرة."
-          : "As a private coach, he creates tailored plans for fat loss, muscle gain, performance development, and rehabilitation, with structured follow-up that helps clients achieve stable and visible results.",
-        images: ["/IMAGE/private-1.jpeg", "/IMAGE/private-2.jpeg", "/IMAGE/private-3.jpeg"],
-        icon: <Dumbbell size={18} />,
-      },
-      {
-        title: isAr ? "مع كباتن وأبطال كبار" : "With Elite Captains and Champions",
-        text: isAr
-          ? "وجود د. أشرف وسط نخبة من الكباتن والأبطال يعكس مكانته داخل المجال الرياضي. خبرته لا تقتصر فقط على التدريب، بل تمتد لتطوير المدربين، بناء فرق قوية، وصناعة بيئة احترافية عالية المستوى داخل الجيمات والبطولات والمناسبات الرياضية."
-          : "Being surrounded by elite captains and champions reflects his strong standing in the sports field. His impact goes beyond coaching into trainer development, team building, and creating professional high-performance environments.",
-        images: ["/IMAGE/judg4.jpg"],
-        icon: <Medal size={18} />,
-      },
-    ],
-    [isAr]
-  );
-
-  const galleryImages = [
-    "/IMAGE/dr3.jpeg",
-    "/IMAGE/dr2.jpg",
-    "/IMAGE/dr3.jpg",
-    "/IMAGE/champions.jpg",
-  ];
-
-  const allGalleryTitle = isAr ? "صور الكابتن" : "Captain Gallery";
+  const allGalleryImages = liveGallery.map((item) => item.imageUrl).filter(Boolean);
 
   const openLightbox = (images: string[], index: number, title: string) => {
     setLightbox({ images, index, title });
@@ -489,6 +1194,12 @@ export default function About() {
       window.removeEventListener("keydown", onKey);
     };
   }, [lightbox]);
+
+  const HOME_PATH = ROUTE_PATHS?.HOME ?? "/";
+  const ABOUT_PATH = ROUTE_PATHS?.ABOUT ?? "/about";
+  const CLASSES_PATH = ROUTE_PATHS?.CLASSES ?? "/classes";
+  const BOOKING_PATH = ROUTE_PATHS?.BOOKING ?? "/booking";
+  const CONTACT_PATH = "#contact";
 
   const rootDir = isAr ? "rtl" : "ltr";
   const rootAlign = isAr ? "right" : "left";
@@ -616,9 +1327,7 @@ export default function About() {
             <BrandLogo colors={colors} />
 
             <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
-              <span style={{ color: colors.gold, fontWeight: 900, fontSize: 21 }}>
-                {isAr ? "د. أشرف العبد" : "Dr. Ashraf El Abd"}
-              </span>
+              <span style={{ color: colors.gold, fontWeight: 900, fontSize: 21 }}>{t.brand}</span>
               <span
                 style={{
                   fontSize: 11,
@@ -649,8 +1358,11 @@ export default function About() {
             <NavLink to={ABOUT_PATH} style={navLinkBase}>
               {t.navAbout}
             </NavLink>
-            <NavLink to={SERVICES_PATH} style={navLinkBase}>
-              {t.navServices}
+            <NavLink to={CLASSES_PATH} style={navLinkBase}>
+              {t.navClasses}
+            </NavLink>
+            <NavLink to={BOOKING_PATH} style={navLinkBase}>
+              {t.navBooking}
             </NavLink>
             <a
               href="#gallery"
@@ -688,50 +1400,90 @@ export default function About() {
               flexWrap: "wrap",
             }}
           >
-            <button
-              onClick={() => setLang((prev) => (prev === "ar" ? "en" : "ar"))}
-              aria-label={isAr ? "Change language" : "تغيير اللغة"}
-              style={{
-                border: `1px solid ${colors.border}`,
-                background: colors.bgSoft,
-                color: colors.text,
-                borderRadius: 14,
-                width: 46,
-                height: 46,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                boxShadow: colors.shadow,
-                fontWeight: 900,
-                fontSize: 15,
-              }}
-            >
-              {t.langBadge}
-            </button>
+            <div style={{ position: "relative" }}>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Lang)}
+                style={{
+                  height: 46,
+                  minWidth: 145,
+                  borderRadius: 14,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.bgSoft,
+                  color: colors.text,
+                  fontWeight: 800,
+                  padding: isAr ? "0 12px 0 38px" : "0 38px 0 12px",
+                  outline: "none",
+                  cursor: "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                  boxShadow: colors.shadow,
+                }}
+                aria-label="Language selector"
+              >
+                <option value="ar">{t.langArabic}</option>
+                <option value="en">{t.langEnglish}</option>
+                <option value="de">{t.langGerman}</option>
+              </select>
+
+              <span
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  [isAr ? "left" : "right"]: 12,
+                  pointerEvents: "none",
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: 900,
+                }}
+              >
+                ▼
+              </span>
+            </div>
 
             <button
               onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
-              aria-label={isDark ? "الوضع النهاري" : "الوضع الليلي"}
+              aria-label="Theme toggle"
               style={{
+                height: 46,
+                minWidth: 118,
+                borderRadius: 14,
                 border: `1px solid ${colors.border}`,
                 background: colors.bgSoft,
                 color: colors.text,
-                borderRadius: 14,
-                width: 46,
-                height: 46,
+                cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                cursor: "pointer",
+                gap: 8,
+                padding: "0 14px",
+                fontWeight: 800,
                 boxShadow: colors.shadow,
+                transition: "all 0.25s ease",
               }}
             >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  background: colors.goldSoft,
+                  color: colors.gold,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {isDark ? <Moon size={14} /> : <Sun size={14} />}
+              </span>
+              <span>{isDark ? t.themeDark : t.themeLight}</span>
             </button>
 
             <a
-              href={WHATSAPP_LINK}
+              href={whatsappLink}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -755,7 +1507,7 @@ export default function About() {
       </header>
 
       <a
-        href={WHATSAPP_LINK}
+        href={whatsappLink}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="WhatsApp"
@@ -872,17 +1624,12 @@ export default function About() {
               {t.overviewTitle}
             </div>
 
-            <p style={{ color: colors.textSoft, lineHeight: 2, marginBottom: 14 }}>
-              {t.overviewText1}
-            </p>
-
-            <p style={{ color: colors.textSoft, lineHeight: 2, marginBottom: 20 }}>
-              {t.overviewText2}
-            </p>
+            <p style={{ color: colors.textSoft, lineHeight: 2, marginBottom: 14 }}>{t.overviewText1}</p>
+            <p style={{ color: colors.textSoft, lineHeight: 2, marginBottom: 20 }}>{t.overviewText2}</p>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <a
-                href={WHATSAPP_LINK}
+                href={whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -928,9 +1675,9 @@ export default function About() {
               gap: 16,
             }}
           >
-            {highlights.map((item) => (
+            {liveHighlights.map((item) => (
               <HoverCard
-                key={item.title}
+                key={item.id}
                 style={{
                   background: colors.bgCard,
                   border: `1px solid ${colors.border}`,
@@ -955,10 +1702,12 @@ export default function About() {
                     flexShrink: 0,
                   }}
                 >
-                  {item.icon}
+                  {getHighlightIcon(item.icon)}
                 </div>
 
-                <div style={{ fontWeight: 800, lineHeight: 1.6 }}>{item.title}</div>
+                <div style={{ fontWeight: 800, lineHeight: 1.6 }}>
+                  {localize(lang, item.titleAr, item.titleEn, item.titleDe)}
+                </div>
               </HoverCard>
             ))}
           </div>
@@ -988,9 +1737,9 @@ export default function About() {
               gap: 12,
             }}
           >
-            {roles.map((item) => (
+            {liveRoles.map((item) => (
               <div
-                key={item}
+                key={item.id}
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -1001,7 +1750,7 @@ export default function About() {
                 }}
               >
                 <CheckCircle2 size={16} style={{ color: colors.gold, flexShrink: 0, marginTop: 6 }} />
-                <span>{item}</span>
+                <span>{localize(lang, item.textAr, item.textEn, item.textDe)}</span>
               </div>
             ))}
           </div>
@@ -1014,9 +1763,9 @@ export default function About() {
           </div>
 
           <div style={{ display: "grid", gap: 20 }}>
-            {featuredStories.map((story) => (
+            {liveStories.map((story) => (
               <HoverCard
-                key={story.title}
+                key={story.id}
                 style={{
                   background: colors.bgSoft,
                   border: `1px solid ${colors.border}`,
@@ -1045,11 +1794,15 @@ export default function About() {
                       marginBottom: 16,
                     }}
                   >
-                    {story.icon}
+                    {getStoryIcon(story.icon)}
                   </div>
 
-                  <h3 style={{ margin: "0 0 12px", fontSize: 24, fontWeight: 900 }}>{story.title}</h3>
-                  <p style={{ margin: 0, color: colors.textSoft, lineHeight: 2 }}>{story.text}</p>
+                  <h3 style={{ margin: "0 0 12px", fontSize: 24, fontWeight: 900 }}>
+                    {localize(lang, story.titleAr, story.titleEn, story.titleDe)}
+                  </h3>
+                  <p style={{ margin: 0, color: colors.textSoft, lineHeight: 2 }}>
+                    {localize(lang, story.textAr, story.textEn, story.textDe)}
+                  </p>
                 </div>
 
                 <div
@@ -1063,7 +1816,13 @@ export default function About() {
                     <button
                       key={img + idx}
                       type="button"
-                      onClick={() => openLightbox(story.images, idx, story.title)}
+                      onClick={() =>
+                        openLightbox(
+                          story.images,
+                          idx,
+                          localize(lang, story.titleAr, story.titleEn, story.titleDe)
+                        )
+                      }
                       style={{
                         all: "unset",
                         cursor: "pointer",
@@ -1071,13 +1830,13 @@ export default function About() {
                         borderInlineEnd:
                           idx !== story.images.length - 1 ? `1px solid ${colors.border}` : "none",
                       }}
-                      aria-label={`${t.openImage} ${story.title}`}
+                      aria-label={`${t.openImage} ${idx + 1}`}
                     >
                       <div className="zoom-wrap shine">
                         <img
                           className="zoom-img"
                           src={img}
-                          alt={`${story.title} ${idx + 1}`}
+                          alt={`${localize(lang, story.titleAr, story.titleEn, story.titleDe)} ${idx + 1}`}
                           style={{
                             width: "100%",
                             height: story.images.length === 1 ? 360 : 280,
@@ -1107,51 +1866,201 @@ export default function About() {
               gap: 18,
             }}
           >
-            {certificates.map((group) => (
-              <HoverCard
-                key={group.group}
-                style={{
-                  background: colors.bgCard,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 22,
-                  padding: 24,
-                  boxShadow: colors.shadow,
-                  textAlign: rootAlign,
-                }}
-              >
-                <div
+            {liveCertificates.map((group) => {
+              const items =
+                lang === "ar"
+                  ? group.itemsAr
+                  : lang === "en"
+                  ? group.itemsEn?.length
+                    ? group.itemsEn
+                    : group.itemsAr
+                  : group.itemsDe?.length
+                  ? group.itemsDe
+                  : group.itemsEn?.length
+                  ? group.itemsEn
+                  : group.itemsAr;
+
+              return (
+                <HoverCard
+                  key={group.id}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    color: colors.gold,
-                    fontWeight: 800,
-                    marginBottom: 14,
+                    background: colors.bgCard,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 22,
+                    padding: 24,
+                    boxShadow: colors.shadow,
+                    textAlign: rootAlign,
                   }}
                 >
-                  <GraduationCap size={18} />
-                  {group.group}
-                </div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: colors.gold,
+                      fontWeight: 800,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <GraduationCap size={18} />
+                    {localize(lang, group.groupAr, group.groupEn, group.groupDe)}
+                  </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  {group.items.map((item) => (
-                    <div
-                      key={item}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 10,
-                        color: colors.textSoft,
-                        lineHeight: 1.8,
-                      }}
-                    >
-                      <CheckCircle2 size={16} style={{ color: colors.gold, flexShrink: 0, marginTop: 5 }} />
-                      <span>{item}</span>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 10,
+                          color: colors.textSoft,
+                          lineHeight: 1.8,
+                        }}
+                      >
+                        <CheckCircle2 size={16} style={{ color: colors.gold, flexShrink: 0, marginTop: 5 }} />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </HoverCard>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="fade-up" style={{ marginBottom: 42 }}>
+          <div style={{ textAlign: rootAlign, marginBottom: 20 }}>
+            <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 8 }}>{t.mediaTitle}</div>
+            <h2 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>{t.mediaTitle}</h2>
+            <p style={{ color: colors.textSoft, lineHeight: 1.9, margin: "10px 0 0", maxWidth: 760 }}>
+              {t.mediaSub}
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+              gap: 18,
+            }}
+          >
+            {liveMedia.map((item) => {
+              const title = localize(lang, item.titleAr, item.titleEn, item.titleDe);
+              const text = localize(lang, item.textAr, item.textEn, item.textDe);
+              const typeLabel = item.type === "tv" ? t.tvLabel : t.podcastLabel;
+              const typeIcon = item.type === "tv" ? <Tv size={16} /> : <Mic2 size={16} />;
+
+              return (
+                <HoverCard
+                  key={item.id}
+                  style={{
+                    background: colors.bgCard,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    boxShadow: colors.shadow,
+                  }}
+                >
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ textDecoration: "none", color: "inherit", display: "block" }}
+                  >
+                    <div className="zoom-wrap shine" style={{ height: 220 }}>
+                      <img
+                        className="zoom-img"
+                        src={`https://img.youtube.com/vi/${item.youtubeId}/hqdefault.jpg`}
+                        alt={title}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.52))",
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 14,
+                          [isAr ? "right" : "left"]: 14,
+                          background: colors.heroPanel,
+                          border: `1px solid ${colors.border}`,
+                          color: colors.gold,
+                          padding: "8px 12px",
+                          borderRadius: 999,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: 12,
+                          fontWeight: 800,
+                          backdropFilter: "blur(10px)",
+                        }}
+                      >
+                        {typeIcon}
+                        {typeLabel}
+                      </div>
+
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 68,
+                            height: 68,
+                            borderRadius: "50%",
+                            background: "rgba(255,255,255,0.14)",
+                            border: "1px solid rgba(255,255,255,0.18)",
+                            color: "#fff",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backdropFilter: "blur(10px)",
+                            boxShadow: "0 20px 40px rgba(0,0,0,0.28)",
+                          }}
+                        >
+                          <Play size={26} fill="currentColor" />
+                        </span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </HoverCard>
-            ))}
+
+                    <div style={{ padding: 22, textAlign: rootAlign }}>
+                      <h3 style={{ margin: "0 0 10px", fontSize: 22, fontWeight: 900 }}>{title}</h3>
+                      <p style={{ margin: "0 0 18px", color: colors.textSoft, lineHeight: 1.9 }}>{text}</p>
+
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          color: colors.gold,
+                          fontWeight: 900,
+                        }}
+                      >
+                        {t.watchEpisode}
+                        <ExternalLink size={16} />
+                      </span>
+                    </div>
+                  </a>
+                </HoverCard>
+              );
+            })}
           </div>
         </section>
 
@@ -1168,9 +2077,9 @@ export default function About() {
               gap: 18,
             }}
           >
-            {services.map((service) => (
+            {liveServices.map((service) => (
               <HoverCard
-                key={service.title}
+                key={service.id}
                 style={{
                   background: colors.bgCard,
                   border: `1px solid ${colors.border}`,
@@ -1193,10 +2102,14 @@ export default function About() {
                     marginBottom: 14,
                   }}
                 >
-                  {service.icon}
+                  {getServiceIcon(service.icon)}
                 </div>
-                <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 900 }}>{service.title}</h3>
-                <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.85, fontSize: 14 }}>{service.desc}</p>
+                <h3 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 900 }}>
+                  {localize(lang, service.titleAr, service.titleEn, service.titleDe)}
+                </h3>
+                <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.85, fontSize: 14 }}>
+                  {localize(lang, service.descAr, service.descEn, service.descDe)}
+                </p>
               </HoverCard>
             ))}
           </div>
@@ -1214,9 +2127,9 @@ export default function About() {
               gap: 18,
             }}
           >
-            {galleryImages.map((img, index) => (
+            {liveGallery.map((img, index) => (
               <HoverCard
-                key={img + index}
+                key={img.id}
                 style={{
                   background: colors.bgSoft,
                   border: `1px solid ${colors.border}`,
@@ -1227,14 +2140,14 @@ export default function About() {
               >
                 <button
                   type="button"
-                  onClick={() => openLightbox(galleryImages, index, allGalleryTitle)}
+                  onClick={() => openLightbox(allGalleryImages, index, t.galleryTitle)}
                   style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}
                   aria-label={`${t.openImage} ${index + 1}`}
                 >
                   <div className="zoom-wrap shine">
                     <img
                       className="zoom-img"
-                      src={img}
+                      src={img.imageUrl}
                       alt={`Dr Ashraf ${index + 1}`}
                       style={{
                         width: "100%",
@@ -1282,7 +2195,7 @@ export default function About() {
 
                 <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 28 }}>
                   <a
-                    href={WHATSAPP_LINK}
+                    href={whatsappLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -1299,7 +2212,7 @@ export default function About() {
                   </a>
 
                   <NavLink
-                    to={SERVICES_PATH}
+                    to={CLASSES_PATH}
                     style={{
                       border: `1px solid ${colors.border}`,
                       color: colors.text,
@@ -1310,7 +2223,7 @@ export default function About() {
                       fontWeight: 800,
                     }}
                   >
-                    {t.knowServices}
+                    {t.knowClasses}
                   </NavLink>
                 </div>
               </div>
@@ -1323,37 +2236,37 @@ export default function About() {
                 }}
               >
                 <SocialLinkCard
-                  href={WHATSAPP_LINK}
+                  href={whatsappLink}
                   icon={<MessageCircle size={20} />}
-                  title={isAr ? "واتساب" : "WhatsApp"}
-                  subtitle={isAr ? "افتح الآن" : "Open Now"}
+                  title={localize(lang, "واتساب", "WhatsApp", "WhatsApp")}
+                  subtitle={t.openNow}
                   accentColor="#25D366"
                   colors={colors}
                 />
 
                 <SocialLinkCard
-                  href={FACEBOOK_LINK}
+                  href={siteSettings.facebookLink}
                   icon={<FacebookIcon size={20} />}
                   title={t.facebookLabel}
-                  subtitle={isAr ? "افتح الآن" : "Open Now"}
+                  subtitle={t.openNow}
                   accentColor="#1877F2"
                   colors={colors}
                 />
 
                 <SocialLinkCard
-                  href={INSTAGRAM_LINK}
+                  href={siteSettings.instagramLink}
                   icon={<Instagram size={20} />}
                   title={t.instagramLabel}
-                  subtitle={isAr ? "افتح الآن" : "Open Now"}
+                  subtitle={t.openNow}
                   accentColor="#E1306C"
                   colors={colors}
                 />
 
                 <SocialLinkCard
-                  href={TIKTOK_LINK}
+                  href={siteSettings.tiktokLink}
                   icon={<TikTokIcon size={20} />}
                   title={t.tiktokLabel}
-                  subtitle={isAr ? "افتح الآن" : "Open Now"}
+                  subtitle={t.openNow}
                   accentColor={isDark ? "#ffffff" : "#111111"}
                   colors={colors}
                 />
@@ -1411,9 +2324,7 @@ export default function About() {
                 <BrandLogo colors={colors} size={50} />
 
                 <div>
-                  <div style={{ color: colors.gold, fontWeight: 900, fontSize: 20 }}>
-                    {isAr ? "د. أشرف العبد" : "Dr. Ashraf El Abd"}
-                  </div>
+                  <div style={{ color: colors.gold, fontWeight: 900, fontSize: 20 }}>{t.brand}</div>
                   <div style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
                     {t.brandSub}
                   </div>
@@ -1425,7 +2336,7 @@ export default function About() {
               </p>
 
               <a
-                href={WHATSAPP_LINK}
+                href={whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -1455,14 +2366,14 @@ export default function About() {
                 <NavLink to={ABOUT_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.navAbout}
                 </NavLink>
-                <NavLink to={SERVICES_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
-                  {t.navServices}
+                <NavLink to={CLASSES_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
+                  {t.navClasses}
+                </NavLink>
+                <NavLink to={BOOKING_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
+                  {t.navBooking}
                 </NavLink>
                 <a href="#gallery" style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.navGallery}
-                </a>
-                <a href="#contact" style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
-                  {t.navContact}
                 </a>
               </div>
             </div>
@@ -1470,11 +2381,10 @@ export default function About() {
             <div style={{ textAlign: rootAlign }}>
               <h3 style={{ margin: "0 0 16px", color: colors.gold, fontSize: 17 }}>{t.footerServices}</h3>
               <div style={{ display: "grid", gap: 12, color: colors.textSoft, fontSize: 14 }}>
-                <span>{isAr ? "التدريب الأونلاين" : "Online Coaching"}</span>
-                <span>{isAr ? "برامج التغذية" : "Nutrition Programs"}</span>
-                <span>{isAr ? "تحضير البطولات" : "Competition Prep"}</span>
-                <span>{isAr ? "الاستشفاء والحجامة" : "Recovery & Hijama"}</span>
-                <span>{isAr ? "الكورسات والورش" : "Courses & Workshops"}</span>
+                <span>{localize(lang, "التدريب الأونلاين", "Online Coaching", "Online-Coaching")}</span>
+                <span>{localize(lang, "البرامج الغذائية", "Nutrition Programs", "Ernährungsprogramme")}</span>
+                <span>{localize(lang, "تحضير البطولات", "Competition Prep", "Wettkampfvorbereitung")}</span>
+                <span>{localize(lang, "ورش وكورسات", "Courses & Workshops", "Kurse & Workshops")}</span>
               </div>
             </div>
 
@@ -1495,7 +2405,7 @@ export default function About() {
                   <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 10 }}>{t.footerFollow}</div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <a
-                      href={INSTAGRAM_LINK}
+                      href={siteSettings.instagramLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1515,7 +2425,7 @@ export default function About() {
                     </a>
 
                     <a
-                      href={FACEBOOK_LINK}
+                      href={siteSettings.facebookLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1535,7 +2445,7 @@ export default function About() {
                     </a>
 
                     <a
-                      href={TIKTOK_LINK}
+                      href={siteSettings.tiktokLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1555,7 +2465,7 @@ export default function About() {
                     </a>
 
                     <a
-                      href={WHATSAPP_LINK}
+                      href={whatsappLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1585,29 +2495,69 @@ export default function About() {
               paddingTop: 18,
               display: "flex",
               justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "wrap",
               alignItems: "center",
+              gap: 14,
+              color: colors.textMuted,
+              fontSize: 13,
+              flexWrap: "wrap",
             }}
           >
-            <div style={{ color: colors.textMuted, fontSize: 13 }}>
-              {isAr ? "جميع الحقوق محفوظة © د. أشرف العبد" : "All rights reserved © Dr. Ashraf El Abd"}
-            </div>
+            <span>{t.rights}</span>
 
             <div
               style={{
                 display: "flex",
-                gap: 14,
-                flexWrap: "wrap",
                 alignItems: "center",
-                color: colors.textMuted,
-                fontSize: 13,
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 20,
+                background: `linear-gradient(135deg, ${colors.goldSoft}, rgba(255,255,255,0.02))`,
+                border: `1px solid ${colors.border}`,
+                boxShadow: colors.glow,
               }}
             >
-              <span>{isAr ? "تصميم احترافي" : "Premium Experience"}</span>
-              <span>•</span>
-              <span>{isAr ? "حجز مباشر عبر واتساب" : "Direct WhatsApp Booking"}</span>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700 }}>
+                  {localize(lang, "تم التطوير بواسطة", "Developed by", "Entwickelt von")}
+                </span>
+                <span style={{ color: colors.gold, fontWeight: 900, fontSize: 15 }}>
+                  {siteSettings.developerName || defaultSiteSettings.developerName}
+                </span>
+                <span style={{ color: colors.textMuted, fontSize: 12 }}>
+                  {localize(lang, "برمجة وتطوير واجهات", "Frontend & Web Development", "Frontend- & Webentwicklung")}
+                </span>
+              </div>
+
+              <a
+                href={developerWhatsapp}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  textDecoration: "none",
+                  color: "#111",
+                  fontWeight: 900,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "11px 16px",
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, #25D366, #53df87)",
+                  boxShadow: "0 10px 24px rgba(37,211,102,0.22)",
+                }}
+              >
+                <MessageCircle size={16} />
+                {localize(lang, "واتساب المطور", "Developer WhatsApp", "WhatsApp des Entwicklers")}
+              </a>
             </div>
+
+            <span>{t.footerTag1}</span>
           </div>
         </div>
       </footer>
@@ -1618,189 +2568,113 @@ export default function About() {
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 300,
             background: colors.modalOverlay,
+            zIndex: 120,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "24px",
+            padding: 18,
           }}
         >
           <button
-            type="button"
             onClick={(e) => {
               e.stopPropagation();
               closeLightbox();
             }}
             style={{
-              width: 52,
-              height: 52,
+              position: "absolute",
+              top: 20,
+              [isAr ? "left" : "right"]: 20,
+              width: 48,
+              height: 48,
               borderRadius: "50%",
-              border: `1px solid ${colors.border}`,
+              border: `1px solid rgba(255,255,255,0.12)`,
               background: colors.modalButtonBg,
               color: "#fff",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              position: "absolute",
-              top: 24,
-              right: 24,
             }}
-            aria-label={t.close}
           >
-            <X size={22} />
+            <X size={20} />
           </button>
 
-          {lightbox.images.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  prevImage();
-                }}
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: "50%",
-                  border: `1px solid ${colors.border}`,
-                  background: colors.modalButtonBg,
-                  color: "#fff",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  position: "absolute",
-                  left: 24,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                }}
-                aria-label={t.prev}
-              >
-                <ArrowLeft size={22} />
-              </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              prevImage();
+            }}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              border: `1px solid rgba(255,255,255,0.12)`,
+              background: colors.modalButtonBg,
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={20} />
+          </button>
 
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  nextImage();
-                }}
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: "50%",
-                  border: `1px solid ${colors.border}`,
-                  background: colors.modalButtonBg,
-                  color: "#fff",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  position: "absolute",
-                  right: 24,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                }}
-                aria-label={t.next}
-              >
-                <ArrowRight size={22} />
-              </button>
-            </>
-          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              nextImage();
+            }}
+            style={{
+              position: "absolute",
+              right: 20,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              border: `1px solid rgba(255,255,255,0.12)`,
+              background: colors.modalButtonBg,
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowRight size={20} />
+          </button>
 
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              maxWidth: "min(1100px, 92vw)",
+              width: "min(1000px, 92vw)",
               maxHeight: "90vh",
-              width: "100%",
               display: "flex",
               flexDirection: "column",
-              alignItems: "center",
               gap: 16,
+              alignItems: "center",
             }}
           >
-            <div
+            <img
+              src={lightbox.images[lightbox.index]}
+              alt={lightbox.title}
               style={{
                 width: "100%",
-                borderRadius: 28,
-                overflow: "hidden",
-                border: `1px solid rgba(255,255,255,0.12)`,
-                boxShadow: "0 25px 80px rgba(0,0,0,0.45)",
-                background: "#0d1117",
+                maxHeight: "78vh",
+                objectFit: "contain",
+                borderRadius: 24,
+                display: "block",
               }}
-            >
-              <img
-                src={lightbox.images[lightbox.index]}
-                alt={`${lightbox.title} ${lightbox.index + 1}`}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  maxHeight: "75vh",
-                  objectFit: "contain",
-                  background: "#090b10",
-                }}
-              />
-            </div>
+            />
 
-            {lightbox.images.length > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  overflowX: "auto",
-                  maxWidth: "100%",
-                  padding: "6px 4px",
-                }}
-              >
-                {lightbox.images.map((thumb, idx) => {
-                  const active = idx === lightbox.index;
-                  return (
-                    <button
-                      key={thumb + idx}
-                      type="button"
-                      onClick={() => setLightbox((prev) => (prev ? { ...prev, index: idx } : prev))}
-                      style={{
-                        border: active ? `2px solid ${colors.gold}` : "1px solid rgba(255,255,255,0.14)",
-                        background: "transparent",
-                        padding: 0,
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        cursor: "pointer",
-                        width: 86,
-                        height: 86,
-                        flex: "0 0 auto",
-                        boxShadow: active ? `0 0 0 3px rgba(212,166,63,0.18)` : "none",
-                        opacity: active ? 1 : 0.72,
-                      }}
-                    >
-                      <img
-                        src={thumb}
-                        alt={`thumb ${idx + 1}`}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div
-              style={{
-                color: "#fff",
-                fontWeight: 800,
-                fontSize: 14,
-                textAlign: "center",
-              }}
-            >
-              {lightbox.title} • {lightbox.index + 1} / {lightbox.images.length}
+            <div style={{ color: "#fff", textAlign: "center", fontWeight: 800 }}>
+              {lightbox.title} · {lightbox.index + 1}/{lightbox.images.length}
             </div>
           </div>
         </div>

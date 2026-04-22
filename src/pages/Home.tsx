@@ -1,20 +1,23 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
 import {
-  ArrowLeft,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { NavLink } from "react-router-dom";
+import {
   ArrowRight,
-  BookOpen,
-  Briefcase,
-  Camera,
   Clock3,
   Crown,
   Dumbbell,
   Flame,
-  GraduationCap,
   HeartPulse,
   MapPin,
   MessageCircle,
   Moon,
+  MonitorSmartphone,
   Play,
   ShieldCheck,
   Sparkles,
@@ -23,31 +26,101 @@ import {
   Target,
   Trophy,
   Users,
-  X,
   Zap,
-} from 'lucide-react';
-import { IMAGES, ROUTE_PATHS } from '@/lib/index';
+  ClipboardList,
+  BadgeCheck,
+  Camera,
+  Send,
+  UserCircle2,
+} from "lucide-react";
+import { addDoc, collection, doc, onSnapshot } from "firebase/firestore";
+import { IMAGES, ROUTE_PATHS } from "@/lib/index";
+import { db } from "@/lib/firebase";
 
-const PHONE = '201027570204';
-const WHATSAPP_LINK = `https://wa.me/${PHONE}?text=${encodeURIComponent(
-  'مرحبا، أريد الاستفسار عن الخدمات والحجز'
-)}`;
+type Lang = "ar" | "en" | "de";
+type ThemeMode = "dark" | "light";
 
-const DEVELOPER_WHATSAPP = 'https://wa.me/201008454029';
+type ReviewItem = {
+  id: string;
+  name: string;
+  goal: string;
+  comment: string;
+  rating: number;
+  date: string;
+};
 
-const FACEBOOK_LINK = 'https://www.facebook.com/share/1DTjxnAxVL/?mibextid=wwXIfr';
-const INSTAGRAM_LINK =
-  'https://www.instagram.com/dr.ashraf_el_abd?igsh=c2tpamFreXFuaGI%3D&utm_source=qr';
-const TIKTOK_LINK = 'https://www.tiktok.com/@dr..ashraf.el.abd?_r=1&_t=ZS-95g5Q6SZ8zp';
+type HomeContent = {
+  heroTitle1Ar: string;
+  heroTitle1En: string;
+  heroTitle1De: string;
+  heroTitle2Ar: string;
+  heroTitle2En: string;
+  heroTitle2De: string;
+  heroTextAr: string;
+  heroTextEn: string;
+  heroTextDe: string;
+  introTitleAr: string;
+  introTitleEn: string;
+  introTitleDe: string;
+  introTextAr: string;
+  introTextEn: string;
+  introTextDe: string;
+};
 
-const HOME_PATH = ROUTE_PATHS?.HOME ?? '/';
-const ABOUT_PATH = ROUTE_PATHS?.ABOUT ?? '/about';
-const SERVICES_PATH = ROUTE_PATHS?.SERVICES ?? '/services';
-const CLASSES_PATH = ROUTE_PATHS?.CLASSES ?? '/classes';
-const BOOKING_PATH = ROUTE_PATHS?.BOOKING ?? '/booking';
+type SiteSettings = {
+  whatsappNumber: string;
+  whatsappMessageAr: string;
+  facebookLink: string;
+  instagramLink: string;
+  tiktokLink: string;
+  instaPayLink: string;
+  vodafoneCashNumber: string;
+  stripeLink: string;
+  paypalLink: string;
+  developerName: string;
+  developerPhone: string;
+  developerWhatsAppMessage: string;
+};
 
-type Lang = 'ar' | 'en';
-type ThemeMode = 'dark' | 'light';
+const defaultHomeContent: HomeContent = {
+  heroTitle1Ar: "خطة أونلاين",
+  heroTitle1En: "Online Coaching",
+  heroTitle1De: "Online-Coaching",
+  heroTitle2Ar: "بنتيجة حقيقية",
+  heroTitle2En: "With Real Results",
+  heroTitle2De: "Mit echten Ergebnissen",
+  heroTextAr:
+    "برنامج احترافي للتدريب الأونلاين، متابعة مستمرة، وخطط واضحة تناسب الهدف والمستوى، مع تركيز قوي على النتائج وتحضير البطولات.",
+  heroTextEn:
+    "A professional online coaching experience with continuous follow-up, clear plans tailored to each goal and level, and strong focus on results and competition prep.",
+  heroTextDe:
+    "Ein professionelles Online-Coaching mit kontinuierlicher Betreuung, klaren Plänen passend zu jedem Ziel und Niveau sowie starkem Fokus auf Ergebnisse und Wettkampfvorbereitung.",
+  introTitleAr: "تدريب أونلاين باحتراف",
+  introTitleEn: "Professional Online Coaching",
+  introTitleDe: "Professionelles Online-Coaching",
+  introTextAr:
+    "خدمة متكاملة تشمل التقييم، الخطة التدريبية، التغذية، المتابعة، والتعديلات المستمرة للوصول لأفضل نتيجة.",
+  introTextEn:
+    "A complete service including assessment, training plan, nutrition, follow-up, and continuous adjustments to achieve the best result.",
+  introTextDe:
+    "Ein kompletter Service mit Analyse, Trainingsplan, Ernährung, Betreuung und laufenden Anpassungen für das bestmögliche Ergebnis.",
+};
+
+const defaultSiteSettings: SiteSettings = {
+  whatsappNumber: "201027570204",
+  whatsappMessageAr: "مرحبا، أريد الاستفسار عن خدمات التدريب الأونلاين والحجز",
+  facebookLink: "https://www.facebook.com/share/1DTjxnAxVL/?mibextid=wwXIfr",
+  instagramLink:
+    "https://www.instagram.com/dr.ashraf_el_abd?igsh=c2tpamFreXFuaGI%3D&utm_source=qr",
+  tiktokLink: "https://www.tiktok.com/@dr..ashraf.el.abd?_r=1&_t=ZS-95g5Q6SZ8zp",
+  instaPayLink: "https://ipn.eg/S/ashraf.elabd570204/instapay/2ybBGM",
+  vodafoneCashNumber: "01027570204",
+  stripeLink: "",
+  paypalLink: "",
+  developerName: "المهندس عمرو خالد",
+  developerPhone: "201008454029",
+  developerWhatsAppMessage: "مرحبًا، أريد الاستفسار بخصوص تطوير الموقع",
+};
 
 function FacebookIcon({ size = 20 }: { size?: number }) {
   return (
@@ -75,7 +148,7 @@ function TikTokIcon({ size = 20 }: { size?: number }) {
 
 function BrandLogo({
   colors,
-  size = 54,
+  size = 56,
 }: {
   colors: {
     gold: string;
@@ -91,25 +164,25 @@ function BrandLogo({
         width: size,
         height: size,
         borderRadius: size * 0.32,
-        background: `linear-gradient(135deg, ${colors.goldSoft}, rgba(255,255,255,0.02))`,
+        background: `linear-gradient(135deg, ${colors.goldSoft}, rgba(255,255,255,0.03))`,
         border: `1px solid ${colors.border}`,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
         boxShadow: colors.glow,
         flexShrink: 0,
-        position: 'relative',
-        overflow: 'hidden',
+        position: "relative",
+        overflow: "hidden",
         color: colors.gold,
       }}
     >
       <span
         style={{
-          position: 'absolute',
+          position: "absolute",
           inset: 0,
           background:
-            'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.16), transparent 40%)',
-          pointerEvents: 'none',
+            "radial-gradient(circle at 30% 20%, rgba(255,255,255,0.18), transparent 42%)",
+          pointerEvents: "none",
         }}
       />
       <Dumbbell size={size * 0.44} strokeWidth={2.2} />
@@ -117,13 +190,7 @@ function BrandLogo({
   );
 }
 
-function HoverCard({
-  children,
-  style,
-}: {
-  children: ReactNode;
-  style?: CSSProperties;
-}) {
+function HoverCard({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -131,8 +198,8 @@ function HoverCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        transition: 'transform 0.28s ease, box-shadow 0.28s ease',
-        transform: hovered ? 'translateY(-8px)' : 'translateY(0)',
+        transition: "transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease",
+        transform: hovered ? "translateY(-6px)" : "translateY(0)",
         ...style,
       }}
     >
@@ -167,27 +234,27 @@ function SocialLinkCard({
 
   return (
     <a
-      href={href}
+      href={href || "#"}
       target="_blank"
       rel="noopener noreferrer"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        textDecoration: 'none',
+        textDecoration: "none",
         border: `1px solid ${hovered ? accentColor : colors.border}`,
         background: hovered
           ? `linear-gradient(135deg, ${colors.bgSoft}, rgba(255,255,255,0.02))`
           : colors.bgSoft,
         color: colors.text,
         borderRadius: 22,
-        padding: '16px 18px',
-        display: 'flex',
-        alignItems: 'center',
+        padding: "16px 18px",
+        display: "flex",
+        alignItems: "center",
         gap: 12,
-        boxShadow: hovered ? '0 18px 40px rgba(0,0,0,0.16)' : colors.shadow,
-        transition: 'all 0.28s ease',
-        minHeight: 78,
-        transform: hovered ? 'translateY(-6px)' : 'translateY(0)',
+        boxShadow: hovered ? "0 18px 40px rgba(0,0,0,0.12)" : colors.shadow,
+        transition: "all 0.28s ease",
+        minHeight: 80,
+        transform: hovered ? "translateY(-4px)" : "translateY(0)",
       }}
     >
       <span
@@ -197,17 +264,17 @@ function SocialLinkCard({
           borderRadius: 16,
           background: hovered ? `${accentColor}15` : colors.goldSoft,
           color: accentColor,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
           flexShrink: 0,
-          transition: 'all 0.28s ease',
+          transition: "all 0.28s ease",
         }}
       >
         {icon}
       </span>
 
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontWeight: 900 }}>{title}</span>
         <span style={{ color: colors.textMuted, fontSize: 13 }}>{subtitle}</span>
       </span>
@@ -215,305 +282,713 @@ function SocialLinkCard({
   );
 }
 
-export default function Home() {
-  const [lang, setLang] = useState<Lang>('ar');
-  const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+function SectionTitle({
+  eyebrow,
+  title,
+  text,
+  colors,
+}: {
+  eyebrow: string;
+  title: string;
+  text: string;
+  colors: {
+    gold: string;
+    textSoft: string;
+  };
+}) {
+  return (
+    <div style={{ textAlign: "center", marginBottom: 52 }}>
+      <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 12, letterSpacing: 0.3 }}>
+        {eyebrow}
+      </div>
+      <h2
+        style={{
+          margin: "0 0 14px",
+          fontSize: "clamp(2rem, 3vw, 3rem)",
+          fontWeight: 900,
+          lineHeight: 1.1,
+        }}
+      >
+        {title}
+      </h2>
+      <p style={{ margin: "0 auto", color: colors.textSoft, lineHeight: 1.95, maxWidth: 760 }}>
+        {text}
+      </p>
+    </div>
+  );
+}
 
-  const isAr = lang === 'ar';
-  const isDark = theme === 'dark';
-  const isLightboxOpen = activeImageIndex !== null;
+function StarsDisplay({
+  value,
+  activeColor,
+  inactiveColor,
+  size = 16,
+}: {
+  value: number;
+  activeColor: string;
+  inactiveColor: string;
+  size?: number;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          size={size}
+          fill={i < value ? activeColor : "transparent"}
+          color={i < value ? activeColor : inactiveColor}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StarsInput({
+  value,
+  onChange,
+  activeColor,
+  inactiveColor,
+}: {
+  value: number;
+  onChange: (val: number) => void;
+  activeColor: string;
+  inactiveColor: string;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {Array.from({ length: 5 }).map((_, i) => {
+        const starValue = i + 1;
+        return (
+          <button
+            key={starValue}
+            type="button"
+            onClick={() => onChange(starValue)}
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Star
+              size={24}
+              fill={starValue <= value ? activeColor : "transparent"}
+              color={starValue <= value ? activeColor : inactiveColor}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Home() {
+  const [lang, setLang] = useState<Lang>("ar");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [viewportWidth, setViewportWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1440
+  );
+
+  const [homeContent, setHomeContent] = useState<HomeContent>(defaultHomeContent);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+
+  const [userReviews, setUserReviews] = useState<ReviewItem[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+  const [reviewForm, setReviewForm] = useState({
+    name: "",
+    goal: "",
+    comment: "",
+    rating: 5,
+  });
+
+  const isAr = lang === "ar";
+  const isEn = lang === "en";
+  const isDark = theme === "dark";
+  const isMobile = viewportWidth < 768;
+  const isTablet = viewportWidth < 1024;
 
   const colors = useMemo(
     () => ({
-      bg: isDark ? '#06080c' : '#f6efe3',
-      bgSoft: isDark ? '#0e131b' : '#fffaf4',
-      bgCard: isDark ? '#121823' : '#ffffff',
-      section: isDark ? '#0a0f16' : '#efe4d5',
-      sectionAlt: isDark ? '#090d14' : '#faf2e8',
-      text: isDark ? '#f8f3ea' : '#171717',
-      textSoft: isDark ? 'rgba(248,243,234,0.83)' : 'rgba(23,23,23,0.78)',
-      textMuted: isDark ? 'rgba(248,243,234,0.56)' : 'rgba(23,23,23,0.56)',
-      gold: '#d4a63f',
-      goldSoft: isDark ? 'rgba(212,166,63,0.12)' : 'rgba(212,166,63,0.14)',
-      goldStrong: isDark ? 'rgba(212,166,63,0.24)' : 'rgba(212,166,63,0.22)',
-      border: isDark ? 'rgba(212,166,63,0.16)' : 'rgba(212,166,63,0.20)',
+      bg: isDark ? "#07090e" : "#f7f1e8",
+      bgSoft: isDark ? "#0d121b" : "#fffaf3",
+      bgCard: isDark ? "#101722" : "#ffffff",
+      section: isDark ? "#0b1018" : "#f3eade",
+      sectionAlt: isDark ? "#0a0e15" : "#fcf6ee",
+      text: isDark ? "#f7f2e8" : "#161616",
+      textSoft: isDark ? "rgba(247,242,232,0.82)" : "rgba(22,22,22,0.78)",
+      textMuted: isDark ? "rgba(247,242,232,0.54)" : "rgba(22,22,22,0.56)",
+      gold: "#d4a63f",
+      goldSoft: isDark ? "rgba(212,166,63,0.10)" : "rgba(212,166,63,0.12)",
+      goldStrong: isDark ? "rgba(212,166,63,0.18)" : "rgba(212,166,63,0.16)",
+      border: isDark ? "rgba(212,166,63,0.14)" : "rgba(212,166,63,0.16)",
       heroOverlay: isDark
-        ? 'linear-gradient(180deg, rgba(6,8,12,0.92) 0%, rgba(6,8,12,0.60) 42%, rgba(6,8,12,0.98) 100%)'
-        : 'linear-gradient(180deg, rgba(246,239,227,0.88) 0%, rgba(246,239,227,0.64) 42%, rgba(246,239,227,0.97) 100%)',
-      shadow: isDark ? '0 24px 70px rgba(0,0,0,0.36)' : '0 18px 46px rgba(0,0,0,0.08)',
-      accent: isDark ? '#25D366' : '#1ea952',
+        ? "linear-gradient(180deg, rgba(7,9,14,0.95) 0%, rgba(7,9,14,0.62) 42%, rgba(7,9,14,0.98) 100%)"
+        : "linear-gradient(180deg, rgba(247,241,232,0.92) 0%, rgba(247,241,232,0.64) 42%, rgba(247,241,232,0.98) 100%)",
+      shadow: isDark ? "0 18px 50px rgba(0,0,0,0.28)" : "0 12px 34px rgba(0,0,0,0.08)",
       glow: isDark
-        ? '0 0 0 1px rgba(212,166,63,0.08), 0 24px 60px rgba(0,0,0,0.34)'
-        : '0 0 0 1px rgba(212,166,63,0.16), 0 18px 45px rgba(0,0,0,0.08)',
-      heroPanel: isDark ? 'rgba(13,17,25,0.76)' : 'rgba(255,255,255,0.87)',
-      headerBg: isDark ? 'rgba(6,8,12,0.82)' : 'rgba(255,255,255,0.86)',
-      footerTop: isDark ? '#0d1117' : '#fbf7ef',
-      footerBottom: isDark ? '#080b10' : '#f2eadc',
-      heroButton: 'linear-gradient(135deg, #d4a63f, #f0ca6b)',
-      whatsappGlow: '0 12px 38px rgba(37, 211, 102, 0.28)',
-      modalOverlay: 'rgba(5, 7, 11, 0.88)',
-      modalButtonBg: 'rgba(255,255,255,0.08)',
+        ? "0 0 0 1px rgba(212,166,63,0.06), 0 18px 44px rgba(0,0,0,0.24)"
+        : "0 0 0 1px rgba(212,166,63,0.12), 0 14px 34px rgba(0,0,0,0.06)",
+      heroPanel: isDark ? "rgba(14,18,27,0.72)" : "rgba(255,255,255,0.86)",
+      headerBg: isDark ? "rgba(7,9,14,0.78)" : "rgba(255,255,255,0.82)",
+      footerTop: isDark ? "#0d121a" : "#fcf7ef",
+      footerBottom: isDark ? "#080b11" : "#f2eadf",
+      heroButton: "linear-gradient(135deg, #d4a63f, #f0ca6b)",
+      whatsappGlow: "0 12px 38px rgba(37, 211, 102, 0.24)",
     }),
     [isDark]
   );
 
-  const t = useMemo(
+  const textByLang = (ar: string, en: string, de: string) => (isAr ? ar : isEn ? en : de);
+
+  const dynamicHome = useMemo(
     () => ({
-      brand: isAr ? 'د. أشرف العبد' : 'Dr. Ashraf El Abd',
-      brandSub: isAr ? 'ONLINE COACH • ELITE TRANSFORMATION' : 'ONLINE COACH • ELITE TRANSFORMATION',
-      home: isAr ? 'الرئيسية' : 'Home',
-      navAbout: isAr ? 'نبذة عنا' : 'About',
-      navServices: isAr ? 'الخدمات' : 'Services',
-      navClasses: isAr ? 'الكلاسات' : 'Classes',
-      navBooking: isAr ? 'الحجز' : 'Booking',
-      navGallery: isAr ? 'النتائج' : 'Results',
-
-      heroBadge: isAr ? 'ELITE FITNESS • ONLINE COACHING' : 'ELITE FITNESS • ONLINE COACHING',
-      heroTitle1: isAr ? 'ابنِ جسمًا أقوى' : 'Build A Stronger',
-      heroTitle2: isAr ? 'ونتيجة تُرى' : 'Body, Real Results',
-      heroText: isAr
-        ? 'تجربة تدريب أونلاين احترافية تجمع بين التدريب، التغذية، المتابعة، والاستشفاء داخل نظام واضح وملهم يساعدك تصل لهدفك بشكل أسرع وأذكى.'
-        : 'A premium online coaching experience that combines training, nutrition, follow-up, and recovery inside a clear, motivating system built for real transformation.',
-      heroPrimary: isAr ? 'ابدأ الآن على واتساب' : 'Start on WhatsApp',
-      heroSecondary: isAr ? 'تعرف على خدماتنا' : 'Discover Our Services',
-      heroClasses: isAr ? 'استكشف الكلاسات' : 'Explore Classes',
-      heroBooking: isAr ? 'احجز الآن' : 'Book Now',
-
-      introTitle: isAr ? 'منظومة تدريب متكاملة' : 'Complete Coaching System',
-      introText: isAr
-        ? 'محتوى وخطة ومتابعة وتنفيذ. كل شيء مبني ليعطيك وضوحًا وثقة ونتيجة حقيقية.'
-        : 'Content, planning, follow-up, and execution. Everything is built to give you clarity, confidence, and visible results.',
-
-      sectionServices: isAr ? 'الخدمات' : 'Services',
-      sectionServicesTitle: isAr ? 'خدمات احترافية مصممة للنتيجة' : 'Professional Services Built For Results',
-      sectionServicesText: isAr
-        ? 'كل عنصر داخل المنظومة له دور واضح للوصول لهدفك بطريقة عملية ومستمرة.'
-        : 'Every part of the system has a clear role in helping you reach your goal in a practical, sustainable way.',
-
-      sectionResults: isAr ? 'النتائج' : 'Results',
-      sectionResultsTitle: isAr ? 'نتائج وتحولات حقيقية' : 'Real Transformations',
-      sectionResultsText: isAr
-        ? 'صور التحولات الحقيقية بتعطي ثقة أكبر، وتوضح قوة النظام والالتزام والنتيجة.'
-        : 'Real transformation visuals build trust and show the power of structure, discipline, and coaching.',
-
-      sectionWhy: isAr ? 'لماذا هذه المنظومة؟' : 'Why This System?',
-      sectionWhyTitle: isAr ? 'لأن النتيجة الكبيرة تحتاج خطة واضحة' : 'Because Big Results Need Clear Structure',
-      sectionWhyText: isAr
-        ? 'التحول الحقيقي لا يعتمد على الحماس فقط، بل على نظام، التزام، متابعة، وتعديل مستمر حسب حالتك وهدفك.'
-        : 'Real transformation does not depend on motivation alone, but on structure, consistency, follow-up, and smart adjustments.',
-
-      finalTitle: isAr ? 'جاهز تبدأ التغيير؟' : 'Ready To Transform?',
-      finalText: isAr
-        ? 'ابدأ محادثتك الآن، واعرف الخدمة المناسبة لك، وخطوتك الأولى.'
-        : 'Start your conversation now, discover the best service for you, and get your first step.',
-      finalBtn: isAr ? 'احجز استفسارك الآن' : 'Book Your Inquiry',
-      serviceBtn: isAr ? 'اذهب إلى صفحة الخدمات' : 'Go To Services Page',
-
-      footerText: isAr
-        ? 'جميع الحجوزات والاستفسارات تتم مباشرة عبر واتساب.'
-        : 'All bookings and inquiries are handled directly through WhatsApp.',
-      footerRights: isAr
-        ? 'جميع الحقوق محفوظة © د. أشرف العبد'
-        : 'All rights reserved © Dr. Ashraf El Abd',
-      developer: isAr
-        ? 'تم البرمجة بواسطة المهندس عمرو خالد'
-        : 'Developed by Eng. Amr Khaled',
-      developerContact: isAr ? 'تواصل واتساب' : 'WhatsApp Contact',
-
-      stat1: isAr ? '15+ سنة خبرة' : '15+ Years Experience',
-      stat2: isAr ? '500+ عميل' : '500+ Clients',
-      stat3: isAr ? 'حكم دولي IFBB' : 'IFBB International Judge',
-      stat4: isAr ? 'نتائج حقيقية' : 'Real Results',
-
-      eliteTag: isAr ? 'نظام احترافي' : 'Elite System',
-      watchMore: isAr ? 'شاهد التفاصيل' : 'View Details',
-
-      footerQuick: isAr ? 'روابط سريعة' : 'Quick Links',
-      footerServices: isAr ? 'الخدمات الأساسية' : 'Core Services',
-      footerContact: isAr ? 'بيانات التواصل' : 'Contact Info',
-      footerFollow: isAr ? 'تابعنا' : 'Follow Us',
-      footerLocation: isAr ? 'أونلاين + حجز مباشر عبر واتساب' : 'Online + direct WhatsApp booking',
-      footerHours: isAr ? 'متابعة وحجز حسب المواعيد المتاحة' : 'Booking based on available schedule',
-      whatsappNow: isAr ? 'راسلنا الآن' : 'Chat on WhatsApp',
-      knowServices: isAr ? 'تعرف على خدماتنا' : 'Know Our Services',
-      statsTitle: isAr ? 'أرقام ترفع الثقة' : 'Authority Metrics',
-      socialWhatsapp: isAr ? 'واتساب' : 'WhatsApp',
-      socialFacebook: isAr ? 'فيسبوك' : 'Facebook',
-      socialInstagram: isAr ? 'إنستجرام' : 'Instagram',
-      socialTikTok: isAr ? 'تيك توك' : 'TikTok',
-      socialAction: isAr ? 'افتح الآن' : 'Open Now',
-      langBadge: isAr ? 'E' : 'ع',
-      heroMini1: isAr ? 'متابعة مستمرة' : 'Continuous Follow-up',
-      heroMini2: isAr ? 'خطة مخصصة' : 'Custom Plan',
-      heroMini3: isAr ? 'تحول حقيقي' : 'Real Transformation',
-      resultLabel: isAr ? 'تحول' : 'Transformation',
-      clickToView: isAr ? 'اضغط لعرض الصورة' : 'Click to view image',
-      next: isAr ? 'التالي' : 'Next',
-      prev: isAr ? 'السابق' : 'Previous',
-      close: isAr ? 'إغلاق' : 'Close',
+      heroTitle1: textByLang(
+        homeContent.heroTitle1Ar || defaultHomeContent.heroTitle1Ar,
+        homeContent.heroTitle1En || defaultHomeContent.heroTitle1En,
+        homeContent.heroTitle1De || defaultHomeContent.heroTitle1De
+      ),
+      heroTitle2: textByLang(
+        homeContent.heroTitle2Ar || defaultHomeContent.heroTitle2Ar,
+        homeContent.heroTitle2En || defaultHomeContent.heroTitle2En,
+        homeContent.heroTitle2De || defaultHomeContent.heroTitle2De
+      ),
+      heroText: textByLang(
+        homeContent.heroTextAr || defaultHomeContent.heroTextAr,
+        homeContent.heroTextEn || defaultHomeContent.heroTextEn,
+        homeContent.heroTextDe || defaultHomeContent.heroTextDe
+      ),
+      introTitle: textByLang(
+        homeContent.introTitleAr || defaultHomeContent.introTitleAr,
+        homeContent.introTitleEn || defaultHomeContent.introTitleEn,
+        homeContent.introTitleDe || defaultHomeContent.introTitleDe
+      ),
+      introText: textByLang(
+        homeContent.introTextAr || defaultHomeContent.introTextAr,
+        homeContent.introTextEn || defaultHomeContent.introTextEn,
+        homeContent.introTextDe || defaultHomeContent.introTextDe
+      ),
     }),
-    [isAr]
+    [homeContent, isAr, isEn]
+  );
+
+  const whatsappLink = useMemo(
+    () =>
+      `https://wa.me/${siteSettings.whatsappNumber}?text=${encodeURIComponent(
+        siteSettings.whatsappMessageAr || defaultSiteSettings.whatsappMessageAr
+      )}`,
+    [siteSettings]
+  );
+
+  const developerWhatsapp = useMemo(
+    () =>
+      `https://wa.me/${siteSettings.developerPhone}?text=${encodeURIComponent(
+        siteSettings.developerWhatsAppMessage || defaultSiteSettings.developerWhatsAppMessage
+      )}`,
+    [siteSettings]
+  );
+
+  const t = useMemo(() => {
+    if (isAr) {
+      return {
+        brand: "د. أشرف العبد",
+        brandSub: "ONLINE COACH • ELITE TRANSFORMATION",
+        home: "الرئيسية",
+        navAbout: "نبذة عني",
+        navClasses: "الكلاسات",
+        navBooking: "الحجز",
+        navTransformations: "التحولات",
+
+        heroBadge: "ONLINE COACHING • BODY TRANSFORMATION",
+        heroPrimary: "ابدأ على واتساب",
+        heroSecondary: "تفاصيل الأونلاين كوتشينج",
+        heroBooking: "احجز الآن",
+        heroTransformations: "شاهد التحولات",
+
+        sectionServices: "الأونلاين كوتشينج",
+        sectionServicesTitle: "الخدمة الأساسية بالموقع",
+        sectionServicesText:
+          "التركيز الرئيسي هنا على عرض خدمة الأونلاين كوتشينج بشكل واضح واحترافي، مع إبراز قيمة المتابعة والخطة والنتائج.",
+
+        systemSection: "مميزات الخدمة",
+        systemTitle: "نظام واضح، متابعة حقيقية، ونتيجة قابلة للقياس",
+        systemText:
+          "الخدمة ليست مجرد جدول، بل منظومة متكاملة مبنية على وضوح، متابعة، تعديل مستمر، والتزام بالهدف.",
+
+        finalTitle: "جاهز تبدأ؟",
+        finalText:
+          "ابدأ الآن وخد أول خطوة في برنامج أونلاين مناسب لهدفك، مستواك، وطبيعة جسمك.",
+        finalBtn: "احجز استفسارك الآن",
+        serviceBtn: "صفحة الأونلاين كوتشينج",
+        transformationsBtn: "صفحة التحولات",
+
+        footerText:
+          "التركيز الأساسي على خدمات التدريب الأونلاين وتحضير البطولات مع تواصل مباشر عبر واتساب.",
+        rights: "جميع الحقوق محفوظة © د. أشرف العبد",
+
+        stat1: "متابعة مستمرة",
+        stat2: "خطط مخصصة",
+        stat3: "نتائج واضحة",
+        stat4: "تحضير بطولات",
+
+        eliteTag: "أونلاين كوتشينج",
+        footerQuick: "روابط سريعة",
+        footerServices: "الأقسام الأساسية",
+        footerContact: "بيانات التواصل",
+        footerFollow: "تابعنا",
+        footerLocation: "أونلاين + تواصل مباشر عبر واتساب",
+        footerHours: "المتابعة حسب المواعيد المتاحة",
+        whatsappNow: "راسلنا الآن",
+        knowServices: "تعرف على التفاصيل",
+        statsTitle: "مميزات المنظومة",
+        socialWhatsapp: "واتساب",
+        socialFacebook: "فيسبوك",
+        socialInstagram: "إنستجرام",
+        socialTikTok: "تيك توك",
+        socialAction: "افتح الآن",
+        heroMini1: "متابعة مستمرة",
+        heroMini2: "خطة مخصصة",
+        heroMini3: "نتيجة حقيقية",
+        developerCredit: "تم التطوير بواسطة",
+        developerRole: "برمجة وتطوير واجهات",
+        modernDesign: "تصميم حديث موجه للتدريب الأونلاين",
+        themeLight: "فاتح",
+        themeDark: "ليلي",
+        devWhatsapp: "تواصل واتساب",
+        loadingReviews: "جاري تحميل التقييمات...",
+        noReviews: "لا توجد تقييمات بعد.",
+      };
+    }
+
+    if (isEn) {
+      return {
+        brand: "Dr. Ashraf El Abd",
+        brandSub: "ONLINE COACH • ELITE TRANSFORMATION",
+        home: "Home",
+        navAbout: "About",
+        navClasses: "Classes",
+        navBooking: "Booking",
+        navTransformations: "Transformations",
+
+        heroBadge: "ONLINE COACHING • BODY TRANSFORMATION",
+        heroPrimary: "Start on WhatsApp",
+        heroSecondary: "Online Coaching Details",
+        heroBooking: "Book Now",
+        heroTransformations: "View Transformations",
+
+        sectionServices: "Online Coaching",
+        sectionServicesTitle: "The Core Service Of The Website",
+        sectionServicesText:
+          "The main focus here is presenting online coaching in a clear and professional way, highlighting follow-up, planning, and results.",
+
+        systemSection: "System Highlights",
+        systemTitle: "Clear System, Real Follow-up & Measurable Results",
+        systemText:
+          "This is not just a program sheet. It is a complete coaching system built on clarity, follow-up, smart adjustments, and commitment to the goal.",
+
+        finalTitle: "Ready To Start?",
+        finalText:
+          "Start now and take your first step into an online coaching program tailored to your goal, level, and body type.",
+        finalBtn: "Book Your Inquiry",
+        serviceBtn: "Online Coaching Page",
+        transformationsBtn: "Transformations Page",
+
+        footerText:
+          "Main focus on online coaching and competition prep with direct contact through WhatsApp.",
+        rights: "All rights reserved © Dr. Ashraf El Abd",
+
+        stat1: "Continuous Follow-up",
+        stat2: "Custom Plans",
+        stat3: "Visible Results",
+        stat4: "Competition Prep",
+
+        eliteTag: "Online Coaching",
+        footerQuick: "Quick Links",
+        footerServices: "Core Sections",
+        footerContact: "Contact Info",
+        footerFollow: "Follow Us",
+        footerLocation: "Online + Direct WhatsApp Contact",
+        footerHours: "Follow-up based on available schedule",
+        whatsappNow: "Chat on WhatsApp",
+        knowServices: "Know The Details",
+        statsTitle: "System Highlights",
+        socialWhatsapp: "WhatsApp",
+        socialFacebook: "Facebook",
+        socialInstagram: "Instagram",
+        socialTikTok: "TikTok",
+        socialAction: "Open Now",
+        heroMini1: "Continuous Follow-up",
+        heroMini2: "Custom Plan",
+        heroMini3: "Real Result",
+        developerCredit: "Developed by",
+        developerRole: "Frontend & Web Development",
+        modernDesign: "Modern design focused on online coaching",
+        themeLight: "Light",
+        themeDark: "Dark",
+        devWhatsapp: "WhatsApp Contact",
+        loadingReviews: "Loading reviews...",
+        noReviews: "No reviews yet.",
+      };
+    }
+
+    return {
+      brand: "Dr. Ashraf El Abd",
+      brandSub: "ONLINE COACH • ELITE TRANSFORMATION",
+      home: "Startseite",
+      navAbout: "Über mich",
+      navClasses: "Kurse",
+      navBooking: "Buchung",
+      navTransformations: "Transformationen",
+
+      heroBadge: "ONLINE-COACHING • BODY TRANSFORMATION",
+      heroPrimary: "Auf WhatsApp starten",
+      heroSecondary: "Details zum Online-Coaching",
+      heroBooking: "Jetzt buchen",
+      heroTransformations: "Transformationen ansehen",
+
+      sectionServices: "Online-Coaching",
+      sectionServicesTitle: "Die Hauptleistung der Website",
+      sectionServicesText:
+        "Der Schwerpunkt liegt hier auf einer klaren und professionellen Präsentation des Online-Coachings mit Fokus auf Betreuung, Planung und Ergebnissen.",
+
+      systemSection: "Service-Vorteile",
+      systemTitle: "Klares System, echte Betreuung und messbare Ergebnisse",
+      systemText:
+        "Das ist nicht nur ein Plan, sondern ein komplettes Coaching-System mit Klarheit, Betreuung, laufenden Anpassungen und Zielorientierung.",
+
+      finalTitle: "Bereit zu starten?",
+      finalText:
+        "Starte jetzt und mache den ersten Schritt in ein Online-Coaching-Programm, das zu deinem Ziel, deinem Niveau und deinem Körper passt.",
+      finalBtn: "Jetzt anfragen",
+      serviceBtn: "Online-Coaching-Seite",
+      transformationsBtn: "Transformations-Seite",
+
+      footerText:
+        "Der Hauptfokus liegt auf Online-Coaching und Wettkampfvorbereitung mit direktem Kontakt über WhatsApp.",
+      rights: "Alle Rechte vorbehalten © Dr. Ashraf El Abd",
+
+      stat1: "Kontinuierliche Betreuung",
+      stat2: "Individuelle Pläne",
+      stat3: "Klare Ergebnisse",
+      stat4: "Wettkampfvorbereitung",
+
+      eliteTag: "Online-Coaching",
+      footerQuick: "Schnellzugriffe",
+      footerServices: "Kernbereiche",
+      footerContact: "Kontakt",
+      footerFollow: "Folge uns",
+      footerLocation: "Online + direkter WhatsApp-Kontakt",
+      footerHours: "Betreuung nach verfügbaren Zeiten",
+      whatsappNow: "Jetzt schreiben",
+      knowServices: "Mehr erfahren",
+      statsTitle: "System-Vorteile",
+      socialWhatsapp: "WhatsApp",
+      socialFacebook: "Facebook",
+      socialInstagram: "Instagram",
+      socialTikTok: "TikTok",
+      socialAction: "Jetzt öffnen",
+      heroMini1: "Kontinuierliche Betreuung",
+      heroMini2: "Individueller Plan",
+      heroMini3: "Echtes Ergebnis",
+      developerCredit: "Entwickelt von",
+      developerRole: "Frontend- & Webentwicklung",
+      modernDesign: "Modernes Design mit Fokus auf Online-Coaching",
+      themeLight: "Hell",
+      themeDark: "Dunkel",
+      devWhatsapp: "WhatsApp-Kontakt",
+      loadingReviews: "Bewertungen werden geladen...",
+      noReviews: "Noch keine Bewertungen.",
+    };
+  }, [isAr, isEn]);
+
+  const reviewText = useMemo(
+    () => ({
+      eyebrow: isAr ? "آراء العملاء" : isEn ? "Client Reviews" : "Kundenbewertungen",
+      title: isAr ? "الناس بتقول إيه عن الكابتن؟" : isEn ? "What Do Clients Say?" : "Was sagen die Kunden?",
+      text: isAr
+         
+        ? "A dedicated section for rating the captain with stars and comments in a clean visual layout."
+        : "Ein eigener Bereich für Sternebewertungen und Kommentare in einem klaren, angenehmen Layout.",
+
+      average: isAr ? "متوسط التقييم" : isEn ? "Average Rating" : "Durchschnittsbewertung",
+      total: isAr ? "عدد التقييمات" : isEn ? "Total Reviews" : "Gesamtbewertungen",
+      top: isAr ? "تقييمات 5 نجوم" : isEn ? "5-Star Reviews" : "5-Sterne-Bewertungen",
+      latest: isAr ? "أحدث تقييم" : isEn ? "Latest Review" : "Neueste Bewertung",
+
+      writeTitle: isAr ? "اكتب تقييمك" : isEn ? "Write Your Review" : "Schreibe deine Bewertung",
+      writeText: isAr
+        ? "سيب رأيك في التجربة، واكتب التقييم والكومنت."
+        : isEn
+        ? "Share your experience by leaving a rating and a comment."
+        : "Teile deine Erfahrung mit einer Bewertung und einem Kommentar.",
+
+      yourName: isAr ? "اسمك" : isEn ? "Your Name" : "Dein Name",
+      yourGoal: isAr ? "هدفك" : isEn ? "Your Goal" : "Dein Ziel",
+      yourComment: isAr ? "الكومنت" : isEn ? "Comment" : "Kommentar",
+      yourRating: isAr ? "تقييمك" : isEn ? "Your Rating" : "Deine Bewertung",
+      submit: isAr ? "إرسال التقييم" : isEn ? "Submit Review" : "Bewertung senden",
+      success: isAr
+        ? "تم إرسال التقييم بنجاح"
+        : isEn
+        ? "Review submitted successfully"
+        : "Bewertung erfolgreich gesendet",
+
+      placeholderName: isAr ? "اكتب اسمك" : isEn ? "Enter your name" : "Name eingeben",
+      placeholderGoal: isAr
+        ? "مثال: خسارة دهون / بناء عضل"
+        : isEn
+        ? "Example: Fat Loss / Muscle Gain"
+        : "Beispiel: Fettabbau / Muskelaufbau",
+      placeholderComment: isAr
+        ? "اكتب رأيك في التجربة..."
+        : isEn
+        ? "Write your feedback..."
+        : "Schreibe dein Feedback...",
+    }),
+    [isAr, isEn]
   );
 
   const services = useMemo(
     () => [
       {
-        icon: <Dumbbell size={20} />,
-        title: isAr ? 'التدريب الأونلاين' : 'Online Coaching',
+        icon: <MonitorSmartphone size={20} />,
+        title: isAr ? "برنامج تدريب أونلاين" : isEn ? "Online Training Program" : "Online-Trainingsprogramm",
         desc: isAr
-          ? 'برامج تدريب فردية حسب الهدف والمستوى والمتابعة المستمرة.'
-          : 'Personalized training programs based on your goal, level, and continuous follow-up.',
+          ? "خطة تدريب مخصصة حسب الهدف، المستوى، ونمط الحياة."
+          : isEn
+          ? "A training program tailored to your goal, level, and lifestyle."
+          : "Ein Trainingsprogramm, das auf dein Ziel, dein Niveau und deinen Lebensstil abgestimmt ist.",
       },
       {
         icon: <HeartPulse size={20} />,
-        title: isAr ? 'برامج التغذية' : 'Nutrition Programs',
+        title: isAr ? "خطة تغذية" : isEn ? "Nutrition Plan" : "Ernährungsplan",
         desc: isAr
-          ? 'تخسيس، زيادة وزن، بناء عضلات، ومقاومة الإنسولين.'
-          : 'Fat loss, weight gain, muscle building, and insulin resistance support.',
+          ? "نظام غذائي عملي ومرن يناسب الهدف اليومي."
+          : isEn
+          ? "A practical and flexible nutrition plan aligned with your goal."
+          : "Ein praktischer und flexibler Ernährungsplan passend zu deinem Ziel.",
+      },
+      {
+        icon: <ClipboardList size={20} />,
+        title: isAr ? "متابعة وتقييم" : isEn ? "Follow-up & Evaluation" : "Betreuung & Auswertung",
+        desc: isAr
+          ? "متابعة مستمرة وتقييم دوري للتقدم والالتزام."
+          : isEn
+          ? "Continuous follow-up and regular evaluation of progress and consistency."
+          : "Kontinuierliche Betreuung und regelmäßige Auswertung von Fortschritt und Disziplin.",
+      },
+      {
+        icon: <BadgeCheck size={20} />,
+        title: isAr ? "تعديلات مستمرة" : isEn ? "Ongoing Adjustments" : "Laufende Anpassungen",
+        desc: isAr
+          ? "تعديل الخطة حسب الاستجابة والنتائج الفعلية."
+          : isEn
+          ? "Plan adjustments based on actual response and results."
+          : "Anpassung des Plans auf Basis der tatsächlichen Reaktion und Ergebnisse.",
       },
       {
         icon: <Trophy size={20} />,
-        title: isAr ? 'تحضير البطولات' : 'Competition Prep',
+        title: isAr ? "تحضير بطولات" : isEn ? "Competition Prep" : "Wettkampfvorbereitung",
         desc: isAr
-          ? 'تحضير اللاعبين للمنافسات والظهور بأفضل جاهزية.'
-          : 'Athlete preparation for contests and peak-condition presentation.',
+          ? "تحضير احترافي للبطولات والوصول لأفضل فورمة."
+          : isEn
+          ? "Professional competition prep to reach your best condition."
+          : "Professionelle Wettkampfvorbereitung, um in Bestform zu kommen.",
       },
       {
         icon: <ShieldCheck size={20} />,
-        title: isAr ? 'الاستشفاء والحجامة' : 'Recovery & Hijama',
+        title: isAr ? "نتائج قابلة للقياس" : isEn ? "Measurable Results" : "Messbare Ergebnisse",
         desc: isAr
-          ? 'جلسات استشفاء وحجامة ومساج رياضي ضمن منظومة احترافية.'
-          : 'Recovery sessions, hijama, and sports massage inside a professional system.',
-      },
-      {
-        icon: <BookOpen size={20} />,
-        title: isAr ? 'الكورسات والورش' : 'Courses & Workshops',
-        desc: isAr
-          ? 'كورسات أونلاين وورش عملية لتطوير المعرفة والخبرة.'
-          : 'Online courses and practical workshops to develop knowledge and skill.',
-      },
-      {
-        icon: <Users size={20} />,
-        title: isAr ? 'إعداد المدربين والبوت كامب' : 'Trainer Education & Bootcamps',
-        desc: isAr
-          ? 'تأهيل المدربين، إدارة الفرق، والكلاسات الجماعية والبوت كامب.'
-          : 'Trainer education, team leadership, group classes, and bootcamps.',
-      },
-      {
-        icon: <GraduationCap size={20} />,
-        title: isAr ? 'الكلاسات والجلسات التعليمية' : 'Classes & Education',
-        desc: isAr
-          ? 'محتوى تدريبي وتعليمي منظم للمهتمين بالمجال.'
-          : 'Structured educational content for fitness learners and coaches.',
-      },
-      {
-        icon: <Briefcase size={20} />,
-        title: isAr ? 'الاستشارات والإدارة الرياضية' : 'Fitness Management & Consulting',
-        desc: isAr
-          ? 'خبرة عملية في إدارة الجيمات والفرق وتطوير الأداء.'
-          : 'Practical experience in gym operations, teams, and performance development.',
+          ? "متابعة الأداء والنتائج بشكل واضح ومباشر."
+          : isEn
+          ? "Track performance and results clearly and directly."
+          : "Leistung und Ergebnisse klar und direkt verfolgen.",
       },
     ],
-    [isAr]
+    [isAr, isEn]
+  );
+
+  const programSteps = useMemo(
+    () => [
+      {
+        icon: <Target size={18} />,
+        title: isAr ? "تقييم البداية" : isEn ? "Initial Assessment" : "Erste Analyse",
+        text: isAr
+          ? "تحديد الهدف، المستوى، ونقطة البداية بدقة."
+          : isEn
+          ? "Identify your goal, level, and exact starting point."
+          : "Ziel, Niveau und Ausgangspunkt präzise bestimmen.",
+      },
+      {
+        icon: <Dumbbell size={18} />,
+        title: isAr ? "خطة التدريب" : isEn ? "Training Plan" : "Trainingsplan",
+        text: isAr
+          ? "برنامج تدريبي مخصص حسب الاحتياج."
+          : isEn
+          ? "A tailored training structure built around your needs."
+          : "Ein individueller Trainingsplan nach deinem Bedarf.",
+      },
+      {
+        icon: <HeartPulse size={18} />,
+        title: isAr ? "خطة التغذية" : isEn ? "Nutrition Plan" : "Ernährungsplan",
+        text: isAr
+          ? "نظام غذائي عملي يناسب الهدف."
+          : isEn
+          ? "A realistic nutrition plan aligned with your goal."
+          : "Ein realistischer Ernährungsplan passend zu deinem Ziel.",
+      },
+      {
+        icon: <Users size={18} />,
+        title: isAr ? "المتابعة" : isEn ? "Follow-up" : "Betreuung",
+        text: isAr
+          ? "متابعة دورية وتواصل مستمر."
+          : isEn
+          ? "Regular follow-up and ongoing communication."
+          : "Regelmäßige Betreuung und kontinuierliche Kommunikation.",
+      },
+    ],
+    [isAr, isEn]
   );
 
   const heroStats = useMemo(
     () => [
-      { icon: <Star size={16} />, label: t.stat1, value: '15+', progress: '82%' },
-      { icon: <Users size={16} />, label: t.stat2, value: '500+', progress: '92%' },
-      { icon: <Target size={16} />, label: t.stat3, value: 'IFBB', progress: '78%' },
-      { icon: <Flame size={16} />, label: t.stat4, value: '100%', progress: '88%' },
+      { icon: <Star size={16} />, label: t.stat1, value: "1:1", progress: "90%" },
+      { icon: <Users size={16} />, label: t.stat2, value: "100%", progress: "86%" },
+      { icon: <Target size={16} />, label: t.stat3, value: "Real", progress: "84%" },
+      { icon: <Flame size={16} />, label: t.stat4, value: "Elite", progress: "80%" },
     ],
     [t]
   );
 
-  const galleryImages = [
-    '/IMAGE/be1.jpeg',
-    '/IMAGE/be2.jpeg',
-    '/IMAGE/be3.jpeg',
-    '/IMAGE/be4.jpeg',
-    '/IMAGE/be5.jpeg',
-    '/IMAGE/be6.jpeg',
-    '/IMAGE/be7.jpeg',
-    '/IMAGE/be8.jpeg',
-    '/IMAGE/be9.jpeg',
-    '/IMAGE/jad.jpeg',
-  ];
-
-  const activeImage = activeImageIndex !== null ? galleryImages[activeImageIndex] : null;
-
-  const openImage = (index: number) => setActiveImageIndex(index);
-  const closeLightbox = () => setActiveImageIndex(null);
-
-  const showNextImage = () => {
-    setActiveImageIndex((prev) => {
-      if (prev === null) return prev;
-      return (prev + 1) % galleryImages.length;
-    });
-  };
-
-  const showPrevImage = () => {
-    setActiveImageIndex((prev) => {
-      if (prev === null) return prev;
-      return (prev - 1 + galleryImages.length) % galleryImages.length;
-    });
-  };
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
-    if (!isLightboxOpen) return;
+    const unsubHome = onSnapshot(doc(db, "siteContent", "home"), (snapshot) => {
+      if (!snapshot.exists()) return;
+      setHomeContent({ ...defaultHomeContent, ...(snapshot.data() as Partial<HomeContent>) });
+    });
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeLightbox();
-      if (event.key === 'ArrowRight') {
-        if (isAr) showPrevImage();
-        else showNextImage();
-      }
-      if (event.key === 'ArrowLeft') {
-        if (isAr) showNextImage();
-        else showPrevImage();
-      }
-    };
+    const unsubSettings = onSnapshot(doc(db, "siteContent", "settings"), (snapshot) => {
+      if (!snapshot.exists()) return;
+      setSiteSettings({ ...defaultSiteSettings, ...(snapshot.data() as Partial<SiteSettings>) });
+    });
 
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKeyDown);
+    const unsubReviews = onSnapshot(collection(db, "reviews"), (snapshot) => {
+      const data: ReviewItem[] = snapshot.docs
+        .map((docSnap) => {
+          const d = docSnap.data() as Omit<ReviewItem, "id">;
+          return {
+            id: docSnap.id,
+            name: d.name || "",
+            goal: d.goal || "",
+            comment: d.comment || "",
+            rating: Number(d.rating || 5),
+            date: d.date || "",
+          };
+        })
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      setUserReviews(data);
+      setReviewsLoading(false);
+    });
 
     return () => {
-      document.body.style.overflow = '';
-      window.removeEventListener('keydown', handleKeyDown);
+      unsubHome();
+      unsubSettings();
+      unsubReviews();
     };
-  }, [isLightboxOpen, isAr]);
+  }, []);
 
-  const rootDir = isAr ? 'rtl' : 'ltr';
-  const rootAlign = isAr ? 'right' : 'left';
+  const handleReviewSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+
+    if (!reviewForm.name.trim() || !reviewForm.comment.trim()) return;
+
+    const newReview = {
+      name: reviewForm.name.trim(),
+      goal: reviewForm.goal.trim() || (isAr ? "عميل" : isEn ? "Client" : "Kunde"),
+      comment: reviewForm.comment.trim(),
+      rating: reviewForm.rating,
+      date: new Date().toISOString().slice(0, 10),
+    };
+
+    await addDoc(collection(db, "reviews"), newReview);
+
+    setReviewForm({
+      name: "",
+      goal: "",
+      comment: "",
+      rating: 5,
+    });
+    setReviewSuccess(true);
+    setTimeout(() => setReviewSuccess(false), 2500);
+  };
+
+  const averageRating = useMemo(() => {
+    if (!userReviews.length) return 0;
+    const total = userReviews.reduce((sum, item) => sum + item.rating, 0);
+    return total / userReviews.length;
+  }, [userReviews]);
+
+  const fiveStarsCount = useMemo(
+    () => userReviews.filter((item) => item.rating === 5).length,
+    [userReviews]
+  );
+
+  const latestReviewDate = useMemo(() => {
+    if (!userReviews.length) return "-";
+    return userReviews[0]?.date ?? "-";
+  }, [userReviews]);
+
+  const HOME_PATH = ROUTE_PATHS?.HOME ?? "/";
+  const ABOUT_PATH = ROUTE_PATHS?.ABOUT ?? "/about";
+  const CLASSES_PATH = ROUTE_PATHS?.CLASSES ?? "/classes";
+  const BOOKING_PATH = ROUTE_PATHS?.BOOKING ?? "/booking";
+  const TRANSFORMATIONS_PATH = ROUTE_PATHS?.TRANSFORMATIONS ?? "/transformations";
+
+  const rootDir = isAr ? "rtl" : "ltr";
+  const rootAlign = isAr ? "right" : "left";
 
   const navLinkBase = ({ isActive }: { isActive: boolean }) =>
     ({
       color: isActive ? colors.gold : colors.text,
-      textDecoration: 'none',
+      textDecoration: "none",
       fontWeight: 800,
       fontSize: 14,
-      padding: '11px 14px',
+      padding: "11px 14px",
       borderRadius: 14,
-      transition: '0.25s ease',
-      background: isActive ? colors.goldSoft : 'transparent',
-      border: `1px solid ${isActive ? colors.border : 'transparent'}`,
-      boxShadow: isActive ? colors.glow : 'none',
+      transition: "0.25s ease",
+      background: isActive ? colors.goldSoft : "transparent",
+      border: `1px solid ${isActive ? colors.border : "transparent"}`,
+      boxShadow: isActive ? colors.glow : "none",
+      whiteSpace: "nowrap",
     }) as const;
 
-  const lightboxButtonStyle: CSSProperties = {
-    width: 52,
-    height: 52,
-    borderRadius: '50%',
+  const mobileQuickLinks = [
+    { to: ABOUT_PATH, label: t.navAbout },
+    { to: CLASSES_PATH, label: t.navClasses },
+    { to: TRANSFORMATIONS_PATH, label: t.navTransformations },
+    { to: BOOKING_PATH, label: t.navBooking },
+  ];
+
+  const inputStyle: CSSProperties = {
+    width: "100%",
+    padding: "14px 16px",
+    background: colors.bgCard,
     border: `1px solid ${colors.border}`,
-    background: colors.modalButtonBg,
-    color: '#fff',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    backdropFilter: 'blur(8px)',
-    transition: '0.25s ease',
+    borderRadius: 16,
+    color: colors.text,
+    outline: "none",
+    fontFamily: "Cairo, sans-serif",
+    fontSize: 14,
   };
 
   return (
@@ -522,194 +997,191 @@ export default function Home() {
       style={{
         backgroundColor: colors.bg,
         color: colors.text,
-        minHeight: '100vh',
-        fontFamily: 'Cairo, sans-serif',
+        minHeight: "100vh",
+        fontFamily: "Cairo, sans-serif",
       }}
     >
       <header
         style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 55,
+          position: isMobile ? "relative" : "sticky",
+          top: isMobile ? undefined : 0,
+          zIndex: 120,
           background: colors.headerBg,
-          backdropFilter: 'blur(18px)',
+          backdropFilter: "blur(14px)",
           borderBottom: `1px solid ${colors.border}`,
-          boxShadow: colors.shadow,
+          boxShadow: isMobile ? "none" : "0 6px 22px rgba(0,0,0,0.10)",
         }}
       >
         <div
           style={{
             maxWidth: 1260,
-            margin: '0 auto',
-            padding: '14px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 18,
-            flexWrap: 'wrap',
+            margin: "0 auto",
+            padding: isMobile ? "12px 14px" : "14px 20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
+            flexWrap: isMobile ? "wrap" : "nowrap",
           }}
         >
           <NavLink
             to={HOME_PATH}
-            style={{
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              minWidth: 220,
-            }}
+            style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}
           >
-            <BrandLogo colors={colors} />
+            <BrandLogo colors={colors} size={48} />
 
-            <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-              <span style={{ color: colors.gold, fontWeight: 900, fontSize: 21 }}>{t.brand}</span>
-              <span
-                style={{
-                  fontSize: 11,
-                  color: colors.textMuted,
-                  fontWeight: 800,
-                  marginTop: 4,
-                  letterSpacing: 1,
-                }}
-              >
-                {t.brandSub}
-              </span>
-            </span>
+            <div>
+              <div style={{ color: colors.gold, fontWeight: 900, fontSize: 18 }}>{t.brand}</div>
+              <div style={{ color: colors.textMuted, fontSize: 11 }}>{t.brandSub}</div>
+            </div>
           </NavLink>
 
-          <nav
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              flexWrap: 'wrap',
-              flex: 1,
-            }}
-          >
-            <NavLink to={HOME_PATH} style={navLinkBase}>
-              {t.home}
-            </NavLink>
-            <NavLink to={ABOUT_PATH} style={navLinkBase}>
-              {t.navAbout}
-            </NavLink>
-            <NavLink to={SERVICES_PATH} style={navLinkBase}>
-              {t.navServices}
-            </NavLink>
-            <NavLink to={CLASSES_PATH} style={navLinkBase}>
-              {t.navClasses}
-            </NavLink>
-            <NavLink to={BOOKING_PATH} style={navLinkBase}>
-              {t.navBooking}
-            </NavLink>
-            <a
-              href="#results"
+          {!isTablet && (
+            <nav style={{ display: "flex", gap: 8 }}>
+              {[
+                { to: HOME_PATH, label: t.home },
+                { to: ABOUT_PATH, label: t.navAbout },
+                { to: CLASSES_PATH, label: t.navClasses },
+                { to: TRANSFORMATIONS_PATH, label: t.navTransformations },
+                { to: BOOKING_PATH, label: t.navBooking },
+              ].map((item) => (
+                <NavLink key={item.to} to={item.to} style={navLinkBase}>
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          )}
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value as Lang)}
               style={{
+                height: 40,
+                minWidth: isMobile ? 132 : 145,
+                borderRadius: 12,
+                border: `1px solid ${colors.border}`,
+                background: colors.bgSoft,
                 color: colors.text,
-                textDecoration: 'none',
                 fontWeight: 800,
-                fontSize: 14,
-                padding: '11px 14px',
-                borderRadius: 14,
+                padding: isAr ? "0 12px 0 38px" : "0 38px 0 12px",
+                outline: "none",
+                cursor: "pointer",
+                appearance: "none",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+                boxShadow: colors.shadow,
               }}
+              aria-label="Language selector"
             >
-              {t.navGallery}
-            </a>
-          </nav>
+              <option value="ar">العربية</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+            </select>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
             <button
-              onClick={() => setLang((prev) => (prev === 'ar' ? 'en' : 'ar'))}
-              aria-label={isAr ? 'Change language' : 'تغيير اللغة'}
+              onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
               style={{
+                height: 40,
+                minWidth: isMobile ? 94 : 118,
+                borderRadius: 12,
                 border: `1px solid ${colors.border}`,
                 background: colors.bgSoft,
                 color: colors.text,
-                borderRadius: 14,
-                width: 46,
-                height: 46,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: colors.shadow,
-                fontWeight: 900,
-                fontSize: 15,
-              }}
-            >
-              {t.langBadge}
-            </button>
-
-            <button
-              onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
-              aria-label={isDark ? 'الوضع النهاري' : 'الوضع الليلي'}
-              style={{
-                border: `1px solid ${colors.border}`,
-                background: colors.bgSoft,
-                color: colors.text,
-                borderRadius: 14,
-                width: 46,
-                height: 46,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: colors.shadow,
-              }}
-            >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            <a
-              href={WHATSAPP_LINK}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                background: colors.heroButton,
-                color: '#111',
-                textDecoration: 'none',
-                padding: '11px 18px',
-                borderRadius: 14,
-                fontWeight: 900,
-                boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
-                display: 'inline-flex',
-                alignItems: 'center',
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
+                padding: "0 14px",
+                fontWeight: 800,
+                boxShadow: colors.shadow,
+                transition: "all 0.25s ease",
               }}
+              aria-label="Theme toggle"
             >
-              <MessageCircle size={16} />
-              {t.heroPrimary}
-            </a>
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  background: colors.goldSoft,
+                  color: colors.gold,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {isDark ? <Moon size={14} /> : <Sun size={14} />}
+              </span>
+              <span>{isDark ? t.themeDark : t.themeLight}</span>
+            </button>
           </div>
         </div>
+
+        {isTablet && (
+          <div
+            style={{
+              maxWidth: 1260,
+              margin: "0 auto",
+              padding: "0 14px 12px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                overflowX: "auto",
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+              }}
+            >
+              {mobileQuickLinks.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  style={({ isActive }) => ({
+                    color: isActive ? colors.gold : colors.text,
+                    textDecoration: "none",
+                    fontWeight: 800,
+                    fontSize: 13,
+                    padding: "10px 14px",
+                    borderRadius: 999,
+                    background: isActive ? colors.goldSoft : colors.bgSoft,
+                    border: `1px solid ${colors.border}`,
+                    whiteSpace: "nowrap",
+                    boxShadow: isActive ? colors.glow : "none",
+                    flexShrink: 0,
+                  })}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       <a
-        href={WHATSAPP_LINK}
+        href={whatsappLink}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="WhatsApp"
         style={{
-          position: 'fixed',
-          bottom: 22,
-          [isAr ? 'left' : 'right']: 22,
-          zIndex: 60,
-          width: 62,
-          height: 62,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #25D366, #1aa34e)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          textDecoration: 'none',
+          position: "fixed",
+          bottom: 20,
+          [isAr ? "left" : "right"]: 20,
+          zIndex: 100,
+          width: isMobile ? 58 : 62,
+          height: isMobile ? 58 : 62,
+          borderRadius: "50%",
+          background: "linear-gradient(135deg, #25D366, #1aa34e)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#fff",
+          textDecoration: "none",
           boxShadow: colors.whatsappGlow,
         }}
       >
@@ -718,90 +1190,80 @@ export default function Home() {
 
       <section
         style={{
-          position: 'relative',
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          overflow: 'hidden',
+          position: "relative",
+          minHeight: isMobile ? "auto" : "100vh",
+          display: "flex",
+          alignItems: "center",
+          overflow: "hidden",
         }}
       >
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
-            backgroundImage: `url(${IMAGES?.hero ?? ''})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: isDark ? 'brightness(0.25) contrast(1.1)' : 'brightness(0.88) contrast(1.04)',
-            transform: 'scale(1.05)',
+            backgroundImage: `url(${IMAGES?.hero ?? ""})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            filter: isDark ? "brightness(0.24) contrast(1.05)" : "brightness(0.92) contrast(1.02)",
+            transform: "scale(1.03)",
           }}
         />
 
-        <div style={{ position: 'absolute', inset: 0, background: colors.heroOverlay }} />
+        <div style={{ position: "absolute", inset: 0, background: colors.heroOverlay }} />
 
         <div
           style={{
-            position: 'absolute',
-            inset: 0,
-            background: isDark
-              ? 'linear-gradient(90deg, rgba(6,8,12,0.96) 0%, rgba(6,8,12,0.68) 42%, rgba(6,8,12,0.18) 100%)'
-              : 'linear-gradient(90deg, rgba(247,241,230,0.88) 0%, rgba(247,241,230,0.58) 42%, rgba(247,241,230,0.16) 100%)',
-          }}
-        />
-
-        <div
-          style={{
-            position: 'absolute',
+            position: "absolute",
             top: -120,
-            [isAr ? 'right' : 'left']: -80,
+            [isAr ? "right" : "left"]: -80,
             width: 320,
             height: 320,
-            borderRadius: '50%',
+            borderRadius: "50%",
             background: colors.goldSoft,
-            filter: 'blur(24px)',
+            filter: "blur(30px)",
             zIndex: 1,
           }}
         />
 
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             bottom: -100,
-            [isAr ? 'left' : 'right']: -60,
+            [isAr ? "left" : "right"]: -60,
             width: 260,
             height: 260,
-            borderRadius: '50%',
+            borderRadius: "50%",
             background: colors.goldStrong,
-            filter: 'blur(22px)',
+            filter: "blur(28px)",
             zIndex: 1,
           }}
         />
 
         <div
           style={{
-            position: 'relative',
+            position: "relative",
             zIndex: 2,
-            width: '100%',
+            width: "100%",
             maxWidth: 1260,
-            margin: '0 auto',
-            padding: '110px 20px 60px',
+            margin: "0 auto",
+            padding: isMobile ? "44px 14px 54px" : "100px 20px 70px",
           }}
         >
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: 36,
-              alignItems: 'center',
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.08fr) minmax(0, 0.92fr)",
+              gap: isMobile ? 24 : 42,
+              alignItems: "center",
             }}
           >
             <div style={{ textAlign: rootAlign }}>
               <div
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
+                  display: "inline-flex",
+                  alignItems: "center",
                   gap: 8,
-                  padding: '10px 16px',
+                  padding: "10px 16px",
                   borderRadius: 999,
                   border: `1px solid ${colors.border}`,
                   background: colors.goldSoft,
@@ -818,62 +1280,62 @@ export default function Home() {
 
               <h1
                 style={{
-                  fontSize: 'clamp(2.7rem, 6vw, 5.4rem)',
+                  fontSize: isMobile ? "2.45rem" : "clamp(3rem, 6vw, 5.4rem)",
                   lineHeight: 0.98,
-                  margin: '0 0 16px',
+                  margin: "0 0 18px",
                   fontWeight: 900,
+                  letterSpacing: "-0.03em",
                   maxWidth: 760,
-                  marginInline: isAr ? 'auto 0' : '0 auto',
                 }}
               >
-                {t.heroTitle1}{' '}
+                {dynamicHome.heroTitle1}{" "}
                 <span
                   style={{
                     color: colors.gold,
-                    display: 'inline-block',
-                    textShadow: isDark ? '0 8px 30px rgba(212,166,63,0.22)' : 'none',
+                    display: "inline-block",
+                    textShadow: isDark ? "0 8px 24px rgba(212,166,63,0.16)" : "none",
                   }}
                 >
-                  {t.heroTitle2}
+                  {dynamicHome.heroTitle2}
                 </span>
               </h1>
 
               <p
                 style={{
                   color: colors.textSoft,
-                  fontSize: 17,
+                  fontSize: isMobile ? 15 : 17,
                   lineHeight: 1.95,
                   maxWidth: 640,
-                  margin: isAr ? '0 0 28px auto' : '0 auto 28px 0',
+                  margin: isAr ? "0 0 30px auto" : "0 auto 30px 0",
                 }}
               >
-                {t.heroText}
+                {dynamicHome.heroText}
               </p>
 
               <div
                 style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
+                  display: "flex",
+                  flexWrap: "wrap",
                   gap: 12,
-                  marginBottom: 14,
-                  justifyContent: isAr ? 'flex-end' : 'flex-start',
+                  marginBottom: 18,
+                  justifyContent: isAr ? "flex-end" : "flex-start",
                 }}
               >
                 <a
-                  href={WHATSAPP_LINK}
+                  href={whatsappLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
                     background: colors.heroButton,
-                    color: '#111',
-                    textDecoration: 'none',
-                    padding: '15px 24px',
+                    color: "#111",
+                    textDecoration: "none",
+                    padding: isMobile ? "14px 18px" : "15px 24px",
                     borderRadius: 16,
                     fontWeight: 900,
-                    display: 'inline-flex',
-                    alignItems: 'center',
+                    display: "inline-flex",
+                    alignItems: "center",
                     gap: 9,
-                    boxShadow: '0 10px 40px rgba(212,166,63,0.32)',
+                    boxShadow: "0 12px 28px rgba(212,166,63,0.22)",
                     fontSize: 15,
                   }}
                 >
@@ -882,91 +1344,70 @@ export default function Home() {
                 </a>
 
                 <NavLink
-                  to={SERVICES_PATH}
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    color: colors.text,
-                    background: colors.heroPanel,
-                    textDecoration: 'none',
-                    padding: '15px 22px',
-                    borderRadius: 16,
-                    fontWeight: 800,
-                    boxShadow: colors.shadow,
-                    backdropFilter: 'blur(10px)',
-                  }}
-                >
-                  {t.heroSecondary}
-                </NavLink>
-
-                <a
-                  href="#services"
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    color: colors.text,
-                    background: 'transparent',
-                    textDecoration: 'none',
-                    padding: '15px 20px',
-                    borderRadius: 16,
-                    fontWeight: 800,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <Play size={15} />
-                  {t.watchMore}
-                </a>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 12,
-                  marginBottom: 26,
-                  justifyContent: isAr ? 'flex-end' : 'flex-start',
-                }}
-              >
-                <NavLink
                   to={CLASSES_PATH}
                   style={{
                     border: `1px solid ${colors.border}`,
                     color: colors.text,
                     background: colors.heroPanel,
-                    textDecoration: 'none',
-                    padding: '14px 20px',
-                    borderRadius: 14,
+                    textDecoration: "none",
+                    padding: isMobile ? "14px 18px" : "15px 22px",
+                    borderRadius: 16,
                     fontWeight: 800,
                     boxShadow: colors.shadow,
-                    backdropFilter: 'blur(10px)',
+                    backdropFilter: "blur(10px)",
                   }}
                 >
-                  {t.heroClasses}
+                  {t.heroSecondary}
+                </NavLink>
+
+                <NavLink
+                  to={TRANSFORMATIONS_PATH}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    color: colors.text,
+                    background: colors.heroPanel,
+                    textDecoration: "none",
+                    padding: isMobile ? "14px 18px" : "15px 22px",
+                    borderRadius: 16,
+                    fontWeight: 800,
+                    boxShadow: colors.shadow,
+                    backdropFilter: "blur(10px)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Camera size={15} />
+                  {t.heroTransformations}
                 </NavLink>
 
                 <NavLink
                   to={BOOKING_PATH}
                   style={{
-                    background: colors.heroButton,
-                    color: '#111',
-                    textDecoration: 'none',
-                    padding: '14px 20px',
-                    borderRadius: 14,
-                    fontWeight: 900,
-                    boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
+                    border: `1px solid ${colors.border}`,
+                    color: colors.text,
+                    background: "transparent",
+                    textDecoration: "none",
+                    padding: isMobile ? "14px 18px" : "15px 20px",
+                    borderRadius: 16,
+                    fontWeight: 800,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
                   }}
                 >
+                  <Play size={15} />
                   {t.heroBooking}
                 </NavLink>
               </div>
 
               <div
                 style={{
-                  display: 'flex',
+                  display: "flex",
                   gap: 10,
-                  flexWrap: 'wrap',
-                  justifyContent: isAr ? 'flex-end' : 'flex-start',
-                  marginBottom: 20,
+                  flexWrap: "wrap",
+                  justifyContent: isAr ? "flex-end" : "flex-start",
+                  marginBottom: 24,
                 }}
               >
                 {[t.heroMini1, t.heroMini2, t.heroMini3].map((item) => (
@@ -977,7 +1418,7 @@ export default function Home() {
                       background: colors.heroPanel,
                       color: colors.text,
                       borderRadius: 999,
-                      padding: '10px 14px',
+                      padding: "10px 14px",
                       fontSize: 13,
                       fontWeight: 800,
                       boxShadow: colors.shadow,
@@ -988,7 +1429,7 @@ export default function Home() {
                 ))}
               </div>
 
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 8 }}>
                 <div
                   style={{
                     color: colors.gold,
@@ -1002,8 +1443,8 @@ export default function Home() {
 
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))',
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(165px, 1fr))",
                     gap: 12,
                   }}
                 >
@@ -1014,19 +1455,19 @@ export default function Home() {
                         background: colors.heroPanel,
                         border: `1px solid ${colors.border}`,
                         borderRadius: 20,
-                        padding: '16px 16px',
-                        display: 'flex',
-                        flexDirection: 'column',
+                        padding: "16px",
+                        display: "flex",
+                        flexDirection: "column",
                         gap: 10,
                         boxShadow: colors.shadow,
-                        backdropFilter: 'blur(10px)',
+                        backdropFilter: "blur(10px)",
                       }}
                     >
                       <div
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
                           gap: 10,
                         }}
                       >
@@ -1037,9 +1478,9 @@ export default function Home() {
                             borderRadius: 12,
                             background: colors.goldSoft,
                             color: colors.gold,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                             flexShrink: 0,
                           }}
                         >
@@ -1058,22 +1499,20 @@ export default function Home() {
                         </span>
                       </div>
 
-                      <span style={{ fontWeight: 800, color: colors.text, fontSize: 14 }}>
-                        {item.label}
-                      </span>
+                      <span style={{ fontWeight: 800, color: colors.text, fontSize: 14 }}>{item.label}</span>
 
                       <div
                         style={{
                           height: 6,
-                          width: '100%',
+                          width: "100%",
                           borderRadius: 999,
                           background: colors.goldSoft,
-                          overflow: 'hidden',
+                          overflow: "hidden",
                         }}
                       >
                         <div
                           style={{
-                            height: '100%',
+                            height: "100%",
                             width: item.progress,
                             borderRadius: 999,
                             background: colors.gold,
@@ -1092,29 +1531,28 @@ export default function Home() {
                   background: colors.heroPanel,
                   border: `1px solid ${colors.border}`,
                   borderRadius: 30,
-                  overflow: 'hidden',
+                  overflow: "hidden",
                   boxShadow: colors.glow,
-                  position: 'relative',
-                  backdropFilter: 'blur(14px)',
+                  position: "relative",
+                  backdropFilter: "blur(14px)",
                 }}
               >
                 <div
                   style={{
-                    position: 'absolute',
+                    position: "absolute",
                     top: 18,
-                    [isAr ? 'left' : 'right']: 18,
+                    [isAr ? "left" : "right"]: 18,
                     zIndex: 3,
-                    background: isDark ? 'rgba(8,9,12,0.78)' : 'rgba(255,255,255,0.90)',
+                    background: isDark ? "rgba(8,9,12,0.74)" : "rgba(255,255,255,0.92)",
                     border: `1px solid ${colors.border}`,
                     color: colors.gold,
-                    padding: '8px 12px',
+                    padding: "8px 12px",
                     borderRadius: 999,
-                    display: 'flex',
-                    alignItems: 'center',
+                    display: "flex",
+                    alignItems: "center",
                     gap: 8,
                     fontWeight: 800,
                     fontSize: 13,
-                    backdropFilter: 'blur(10px)',
                   }}
                 >
                   <Crown size={14} />
@@ -1126,30 +1564,32 @@ export default function Home() {
                   alt="Dr. Ashraf"
                   loading="lazy"
                   style={{
-                    width: '100%',
-                    height: 590,
-                    objectFit: 'cover',
-                    display: 'block',
+                    width: "100%",
+                    height: isMobile ? 420 : 620,
+                    objectFit: "cover",
+                    display: "block",
                   }}
                 />
 
-                <div style={{ padding: 26, textAlign: rootAlign }}>
+                <div style={{ padding: isMobile ? 20 : 28, textAlign: rootAlign }}>
                   <div
                     style={{
                       color: colors.gold,
                       fontWeight: 800,
                       fontSize: 13,
                       marginBottom: 8,
-                      display: 'inline-flex',
-                      alignItems: 'center',
+                      display: "inline-flex",
+                      alignItems: "center",
                       gap: 8,
                     }}
                   >
                     <Zap size={14} />
-                    {isAr ? 'بداية التحول الحقيقي' : 'The Start of Real Change'}
+                    {isAr ? "تركيز كامل على النتائج" : isEn ? "Full Focus On Results" : "Voller Fokus auf Ergebnisse"}
                   </div>
 
-                  <h2 style={{ margin: '0 0 10px', fontSize: 30, lineHeight: 1.2 }}>{t.introTitle}</h2>
+                  <h2 style={{ margin: "0 0 10px", fontSize: isMobile ? 24 : 30, lineHeight: 1.2 }}>
+                    {dynamicHome.introTitle}
+                  </h2>
 
                   <p
                     style={{
@@ -1159,7 +1599,7 @@ export default function Home() {
                       fontSize: 15,
                     }}
                   >
-                    {t.introText}
+                    {dynamicHome.introText}
                   </p>
 
                   <div style={{ marginTop: 18 }}>
@@ -1167,10 +1607,10 @@ export default function Home() {
                       to={ABOUT_PATH}
                       style={{
                         color: colors.gold,
-                        textDecoration: 'none',
+                        textDecoration: "none",
                         fontWeight: 800,
-                        display: 'inline-flex',
-                        alignItems: 'center',
+                        display: "inline-flex",
+                        alignItems: "center",
                         gap: 8,
                       }}
                     >
@@ -1185,25 +1625,20 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="services" style={{ padding: '100px 20px', background: colors.bg }}>
-        <div style={{ maxWidth: 1140, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 10, letterSpacing: 0.4 }}>
-              {t.sectionServices}
-            </div>
-            <h2 style={{ margin: '0 0 12px', fontSize: 'clamp(1.9rem, 3vw, 2.9rem)', fontWeight: 900 }}>
-              {t.sectionServicesTitle}
-            </h2>
-            <p style={{ margin: '0 auto', color: colors.textSoft, lineHeight: 1.95, maxWidth: 760 }}>
-              {t.sectionServicesText}
-            </p>
-          </div>
+      <section style={{ padding: isMobile ? "74px 14px" : "110px 20px", background: colors.bg }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+          <SectionTitle
+            eyebrow={t.sectionServices}
+            title={t.sectionServicesTitle}
+            text={t.sectionServicesText}
+            colors={colors}
+          />
 
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 22,
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 18,
             }}
           >
             {services.map((service) => (
@@ -1212,86 +1647,56 @@ export default function Home() {
                 style={{
                   background: colors.bgCard,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: 26,
+                  borderRadius: 24,
                   padding: 24,
                   boxShadow: colors.shadow,
                   textAlign: rootAlign,
-                  position: 'relative',
-                  overflow: 'hidden',
                 }}
               >
                 <div
                   style={{
-                    position: 'absolute',
-                    top: -50,
-                    [isAr ? 'left' : 'right']: -30,
-                    width: 120,
-                    height: 120,
-                    borderRadius: '50%',
-                    background: colors.goldSoft,
-                    filter: 'blur(8px)',
-                  }}
-                />
-
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 16,
+                    width: 54,
+                    height: 54,
+                    borderRadius: 18,
                     background: colors.goldSoft,
                     color: colors.gold,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     marginBottom: 16,
-                    position: 'relative',
-                    zIndex: 1,
                   }}
                 >
                   {service.icon}
                 </div>
 
-                <h3 style={{ margin: '0 0 10px', fontSize: 20, position: 'relative', zIndex: 1 }}>
-                  {service.title}
-                </h3>
-                <p
-                  style={{
-                    margin: 0,
-                    color: colors.textSoft,
-                    lineHeight: 1.9,
-                    fontSize: 14,
-                    position: 'relative',
-                    zIndex: 1,
-                  }}
-                >
-                  {service.desc}
-                </p>
+                <h3 style={{ margin: "0 0 10px", fontSize: 20, fontWeight: 900 }}>{service.title}</h3>
+                <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.9, fontSize: 14 }}>{service.desc}</p>
               </HoverCard>
             ))}
           </div>
 
           <div
             style={{
-              marginTop: 28,
-              display: 'flex',
-              justifyContent: 'center',
+              marginTop: 32,
+              display: "flex",
+              justifyContent: "center",
               gap: 12,
-              flexWrap: 'wrap',
+              flexWrap: "wrap",
             }}
           >
             <NavLink
-              to={SERVICES_PATH}
+              to={CLASSES_PATH}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
+                display: "inline-flex",
+                alignItems: "center",
                 gap: 10,
                 background: colors.heroButton,
-                color: '#111',
-                textDecoration: 'none',
-                padding: '14px 22px',
+                color: "#111",
+                textDecoration: "none",
+                padding: "14px 24px",
                 borderRadius: 16,
                 fontWeight: 900,
-                boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
+                boxShadow: "0 12px 28px rgba(212,166,63,0.22)",
               }}
             >
               {t.serviceBtn}
@@ -1301,14 +1706,14 @@ export default function Home() {
             <NavLink
               to={CLASSES_PATH}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
+                display: "inline-flex",
+                alignItems: "center",
                 gap: 10,
                 border: `1px solid ${colors.border}`,
                 color: colors.text,
                 background: colors.bgCard,
-                textDecoration: 'none',
-                padding: '14px 22px',
+                textDecoration: "none",
+                padding: "14px 22px",
                 borderRadius: 16,
                 fontWeight: 800,
                 boxShadow: colors.shadow,
@@ -1318,18 +1723,38 @@ export default function Home() {
             </NavLink>
 
             <NavLink
+              to={TRANSFORMATIONS_PATH}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                border: `1px solid ${colors.border}`,
+                color: colors.text,
+                background: colors.bgCard,
+                textDecoration: "none",
+                padding: "14px 22px",
+                borderRadius: 16,
+                fontWeight: 800,
+                boxShadow: colors.shadow,
+              }}
+            >
+              <Camera size={16} />
+              {t.transformationsBtn}
+            </NavLink>
+
+            <NavLink
               to={BOOKING_PATH}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
+                display: "inline-flex",
+                alignItems: "center",
                 gap: 10,
                 background: colors.heroButton,
-                color: '#111',
-                textDecoration: 'none',
-                padding: '14px 22px',
+                color: "#111",
+                textDecoration: "none",
+                padding: "14px 22px",
                 borderRadius: 16,
                 fontWeight: 900,
-                boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
+                boxShadow: "0 12px 28px rgba(212,166,63,0.22)",
               }}
             >
               {t.navBooking}
@@ -1338,230 +1763,471 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="results" style={{ padding: '100px 20px', background: colors.sectionAlt }}>
-        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 10 }}>{t.sectionResults}</div>
-            <h2 style={{ margin: '0 0 12px', fontSize: 'clamp(1.9rem, 3vw, 2.9rem)', fontWeight: 900 }}>
-              {t.sectionResultsTitle}
-            </h2>
-            <p style={{ margin: '0 auto', color: colors.textSoft, lineHeight: 1.95, maxWidth: 760 }}>
-              {t.sectionResultsText}
-            </p>
-          </div>
+      <section style={{ padding: isMobile ? "74px 14px" : "110px 20px", background: colors.sectionAlt }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+          <SectionTitle
+            eyebrow={t.systemSection}
+            title={t.systemTitle}
+            text={t.systemText}
+            colors={colors}
+          />
 
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 20,
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "repeat(4, 1fr)",
+              gap: 16,
             }}
           >
-            {galleryImages.map((image, index) => (
+            {programSteps.map((item) => (
               <HoverCard
-                key={index}
+                key={item.title}
                 style={{
                   background: colors.bgCard,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: 26,
-                  overflow: 'hidden',
+                  borderRadius: 22,
+                  padding: 22,
                   boxShadow: colors.shadow,
-                  cursor: 'pointer',
+                  textAlign: rootAlign,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => openImage(index)}
-                  aria-label={`${t.clickToView} ${index + 1}`}
+                <div
                   style={{
-                    all: 'unset',
-                    cursor: 'pointer',
-                    width: '100%',
-                    display: 'block',
+                    width: 46,
+                    height: 46,
+                    borderRadius: 16,
+                    background: colors.goldSoft,
+                    color: colors.gold,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 14,
                   }}
                 >
-                  <div
-                    style={{
-                      height: 280,
-                      overflow: 'hidden',
-                      position: 'relative',
-                    }}
-                  >
-                    <img
-                      src={image}
-                      alt={`Before After ${index + 1}`}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background:
-                          'linear-gradient(180deg, rgba(0,0,0,0.02) 20%, rgba(0,0,0,0.45) 100%)',
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 14,
-                        [isAr ? 'left' : 'right']: 14,
-                        width: 42,
-                        height: 42,
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.14)',
-                        backdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(255,255,255,0.18)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff',
-                      }}
-                    >
-                      <Camera size={16} />
-                    </div>
-                  </div>
+                  {item.icon}
+                </div>
 
-                  <div
-                    style={{
-                      padding: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <div style={{ fontWeight: 900, color: colors.text }}>
-                        {t.resultLabel} {index + 1}
-                      </div>
-                      <div style={{ fontSize: 12, color: colors.textMuted }}>Before / After</div>
-                    </div>
-
-                    <span
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 12,
-                        background: colors.goldSoft,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: colors.gold,
-                      }}
-                    >
-                      <Camera size={16} />
-                    </span>
-                  </div>
-                </button>
+                <div style={{ fontWeight: 900, marginBottom: 8, fontSize: 17 }}>{item.title}</div>
+                <div style={{ color: colors.textSoft, fontSize: 14, lineHeight: 1.85 }}>{item.text}</div>
               </HoverCard>
             ))}
           </div>
         </div>
       </section>
 
-      <section style={{ padding: '100px 20px', background: colors.bg }}>
-        <div style={{ maxWidth: 980, margin: '0 auto' }}>
+      <section style={{ padding: isMobile ? "74px 14px" : "110px 20px", background: colors.bg }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+          <SectionTitle
+            eyebrow={reviewText.eyebrow}
+            title={reviewText.title}
+            text={reviewText.text}
+            colors={colors}
+          />
+
           <div
             style={{
-              background: colors.bgSoft,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 30,
-              padding: 38,
-              boxShadow: colors.shadow,
-              textAlign: 'center',
-              position: 'relative',
-              overflow: 'hidden',
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "320px minmax(0, 1fr)",
+              gap: 20,
+              alignItems: "start",
+              marginBottom: 22,
             }}
           >
-            <div
-              style={{
-                position: 'absolute',
-                top: -60,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: 200,
-                height: 200,
-                borderRadius: '50%',
-                background: colors.goldSoft,
-                filter: 'blur(20px)',
-                zIndex: 0,
-              }}
-            />
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 10 }}>{t.sectionWhy}</div>
-              <h2 style={{ margin: '0 0 14px', fontSize: 'clamp(1.9rem, 3vw, 2.6rem)', fontWeight: 900 }}>
-                {t.sectionWhyTitle}
-              </h2>
-              <p style={{ margin: '0 auto', color: colors.textSoft, lineHeight: 2, maxWidth: 760 }}>
-                {t.sectionWhyText}
+            <div style={{ display: "grid", gap: 16 }}>
+              <HoverCard
+                style={{
+                  background: colors.bgCard,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 22,
+                  padding: 20,
+                  boxShadow: colors.shadow,
+                }}
+              >
+                <div style={{ color: colors.textMuted, fontSize: 13, marginBottom: 10 }}>
+                  {reviewText.average}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 32, color: colors.gold, marginBottom: 10 }}>
+                  {averageRating.toFixed(1)}
+                </div>
+                <StarsDisplay
+                  value={Math.round(averageRating)}
+                  activeColor={colors.gold}
+                  inactiveColor={colors.textMuted}
+                  size={18}
+                />
+              </HoverCard>
+
+              <HoverCard
+                style={{
+                  background: colors.bgCard,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 22,
+                  padding: 20,
+                  boxShadow: colors.shadow,
+                }}
+              >
+                <div style={{ color: colors.textMuted, fontSize: 13, marginBottom: 10 }}>
+                  {reviewText.total}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 32, color: colors.gold }}>
+                  {userReviews.length}
+                </div>
+              </HoverCard>
+
+              <HoverCard
+                style={{
+                  background: colors.bgCard,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 22,
+                  padding: 20,
+                  boxShadow: colors.shadow,
+                }}
+              >
+                <div style={{ color: colors.textMuted, fontSize: 13, marginBottom: 10 }}>
+                  {reviewText.top}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 32, color: colors.gold }}>
+                  {fiveStarsCount}
+                </div>
+              </HoverCard>
+
+              <HoverCard
+                style={{
+                  background: colors.bgCard,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 22,
+                  padding: 20,
+                  boxShadow: colors.shadow,
+                }}
+              >
+                <div style={{ color: colors.textMuted, fontSize: 13, marginBottom: 10 }}>
+                  {reviewText.latest}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: colors.gold }}>
+                  {latestReviewDate}
+                </div>
+              </HoverCard>
+            </div>
+
+            <div style={{ display: "grid", gap: 16 }}>
+              {reviewsLoading ? (
+                <div
+                  style={{
+                    background: colors.bgCard,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 22,
+                    padding: 22,
+                    boxShadow: colors.shadow,
+                    color: colors.textMuted,
+                  }}
+                >
+                  {t.loadingReviews}
+                </div>
+              ) : userReviews.length === 0 ? (
+                <div
+                  style={{
+                    background: colors.bgCard,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 22,
+                    padding: 22,
+                    boxShadow: colors.shadow,
+                    color: colors.textMuted,
+                  }}
+                >
+                  {t.noReviews}
+                </div>
+              ) : (
+                userReviews.map((review) => (
+                  <HoverCard
+                    key={review.id}
+                    style={{
+                      background: colors.bgCard,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 22,
+                      padding: 20,
+                      boxShadow: colors.shadow,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: isMobile ? "flex-start" : "center",
+                        justifyContent: "space-between",
+                        gap: 14,
+                        flexDirection: isMobile ? "column" : "row",
+                        marginBottom: 14,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 16,
+                            background: colors.goldSoft,
+                            color: colors.gold,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <UserCircle2 size={24} />
+                        </span>
+
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: 16 }}>{review.name}</div>
+                          <div style={{ color: colors.textMuted, fontSize: 13 }}>{review.goal}</div>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: isMobile ? "flex-start" : "center",
+                          flexDirection: isMobile ? "column" : "row",
+                          gap: 10,
+                        }}
+                      >
+                        <StarsDisplay
+                          value={review.rating}
+                          activeColor={colors.gold}
+                          inactiveColor={colors.textMuted}
+                        />
+                        <span style={{ color: colors.textMuted, fontSize: 13 }}>{review.date}</span>
+                      </div>
+                    </div>
+
+                    <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.95 }}>{review.comment}</p>
+                  </HoverCard>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: colors.bgCard,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 26,
+              padding: isMobile ? 20 : 28,
+              boxShadow: colors.shadow,
+            }}
+          >
+            <div style={{ textAlign: rootAlign, marginBottom: 22 }}>
+              <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 8 }}>
+                {reviewText.writeTitle}
+              </div>
+              <h3 style={{ margin: "0 0 10px", fontSize: 28, fontWeight: 900 }}>
+                {reviewText.writeTitle}
+              </h3>
+              <p style={{ margin: 0, color: colors.textSoft, lineHeight: 1.9 }}>
+                {reviewText.writeText}
               </p>
             </div>
+
+            <form onSubmit={handleReviewSubmit}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                  gap: 16,
+                  marginBottom: 16,
+                }}
+              >
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      marginBottom: 8,
+                      fontWeight: 800,
+                      color: colors.gold,
+                    }}
+                  >
+                    {reviewText.yourName}
+                  </label>
+                  <input
+                    value={reviewForm.name}
+                    onChange={(e) => setReviewForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder={reviewText.placeholderName}
+                    style={inputStyle}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      marginBottom: 8,
+                      fontWeight: 800,
+                      color: colors.gold,
+                    }}
+                  >
+                    {reviewText.yourGoal}
+                  </label>
+                  <input
+                    value={reviewForm.goal}
+                    onChange={(e) => setReviewForm((prev) => ({ ...prev, goal: e.target.value }))}
+                    placeholder={reviewText.placeholderGoal}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 10,
+                    fontWeight: 800,
+                    color: colors.gold,
+                  }}
+                >
+                  {reviewText.yourRating}
+                </label>
+                <StarsInput
+                  value={reviewForm.rating}
+                  onChange={(value) => setReviewForm((prev) => ({ ...prev, rating: value }))}
+                  activeColor={colors.gold}
+                  inactiveColor={colors.textMuted}
+                />
+              </div>
+
+              <div style={{ marginBottom: 18 }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    fontWeight: 800,
+                    color: colors.gold,
+                  }}
+                >
+                  {reviewText.yourComment}
+                </label>
+                <textarea
+                  rows={5}
+                  value={reviewForm.comment}
+                  onChange={(e) => setReviewForm((prev) => ({ ...prev, comment: e.target.value }))}
+                  placeholder={reviewText.placeholderComment}
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: isMobile ? "stretch" : "center",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    color: reviewSuccess ? "#25D366" : colors.textMuted,
+                    fontWeight: 800,
+                    minHeight: 24,
+                  }}
+                >
+                  {reviewSuccess && <BadgeCheck size={18} />}
+                  {reviewSuccess ? reviewText.success : ""}
+                </div>
+
+                <button
+                  type="submit"
+                  style={{
+                    background: colors.heroButton,
+                    color: "#111",
+                    border: "none",
+                    padding: "14px 22px",
+                    borderRadius: 16,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    boxShadow: "0 12px 28px rgba(212,166,63,0.22)",
+                    minWidth: isMobile ? "100%" : "auto",
+                  }}
+                >
+                  <Send size={16} />
+                  {reviewText.submit}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </section>
 
-      <section id="contact" style={{ padding: '100px 20px', background: colors.section }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <section id="contact" style={{ padding: isMobile ? "74px 14px" : "110px 20px", background: colors.section }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div
             style={{
               background: colors.bgSoft,
               border: `1px solid ${colors.border}`,
               borderRadius: 30,
-              padding: 38,
+              padding: isMobile ? 24 : 42,
               boxShadow: colors.shadow,
-              position: 'relative',
-              overflow: 'hidden',
+              position: "relative",
+              overflow: "hidden",
             }}
           >
             <div
               style={{
-                position: 'absolute',
+                position: "absolute",
                 inset: 0,
                 background: `radial-gradient(circle at top center, ${colors.goldSoft} 0%, transparent 58%)`,
-                pointerEvents: 'none',
+                pointerEvents: "none",
               }}
             />
 
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                <h2 style={{ margin: '0 0 12px', fontSize: 'clamp(1.9rem, 3vw, 2.6rem)', fontWeight: 900 }}>
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <div style={{ textAlign: "center", marginBottom: 28 }}>
+                <h2 style={{ margin: "0 0 12px", fontSize: "clamp(2rem, 3vw, 2.8rem)", fontWeight: 900 }}>
                   {t.finalTitle}
                 </h2>
-                <p style={{ margin: '0 auto 22px', color: colors.textSoft, lineHeight: 1.9, maxWidth: 760 }}>
+                <p style={{ margin: "0 auto 24px", color: colors.textSoft, lineHeight: 1.9, maxWidth: 760 }}>
                   {t.finalText}
                 </p>
 
-                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                    marginBottom: 28,
+                  }}
+                >
                   <a
-                    href={WHATSAPP_LINK}
+                    href={whatsappLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
                       background: colors.heroButton,
-                      color: '#111',
-                      textDecoration: 'none',
-                      padding: '13px 22px',
+                      color: "#111",
+                      textDecoration: "none",
+                      padding: "13px 22px",
                       borderRadius: 14,
                       fontWeight: 900,
-                      boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
+                      boxShadow: "0 12px 28px rgba(212,166,63,0.22)",
                     }}
                   >
                     {t.finalBtn}
                   </a>
 
                   <NavLink
-                    to={SERVICES_PATH}
+                    to={CLASSES_PATH}
                     style={{
                       border: `1px solid ${colors.border}`,
                       color: colors.text,
                       background: colors.bgCard,
-                      textDecoration: 'none',
-                      padding: '13px 22px',
+                      textDecoration: "none",
+                      padding: "13px 22px",
                       borderRadius: 14,
                       fontWeight: 800,
                     }}
@@ -1570,15 +2236,30 @@ export default function Home() {
                   </NavLink>
 
                   <NavLink
+                    to={TRANSFORMATIONS_PATH}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      color: colors.text,
+                      background: colors.bgCard,
+                      textDecoration: "none",
+                      padding: "13px 22px",
+                      borderRadius: 14,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {t.transformationsBtn}
+                  </NavLink>
+
+                  <NavLink
                     to={BOOKING_PATH}
                     style={{
-                      background: colors.heroButton,
-                      color: '#111',
-                      textDecoration: 'none',
-                      padding: '13px 22px',
+                      border: `1px solid ${colors.border}`,
+                      color: colors.text,
+                      background: colors.bgCard,
+                      textDecoration: "none",
+                      padding: "13px 22px",
                       borderRadius: 14,
-                      fontWeight: 900,
-                      boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
+                      fontWeight: 800,
                     }}
                   >
                     {t.navBooking}
@@ -1588,13 +2269,13 @@ export default function Home() {
 
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))",
                   gap: 14,
                 }}
               >
                 <SocialLinkCard
-                  href={WHATSAPP_LINK}
+                  href={whatsappLink}
                   icon={<MessageCircle size={20} />}
                   title={t.socialWhatsapp}
                   subtitle={t.socialAction}
@@ -1603,7 +2284,7 @@ export default function Home() {
                 />
 
                 <SocialLinkCard
-                  href={FACEBOOK_LINK}
+                  href={siteSettings.facebookLink}
                   icon={<FacebookIcon size={20} />}
                   title={t.socialFacebook}
                   subtitle={t.socialAction}
@@ -1612,7 +2293,7 @@ export default function Home() {
                 />
 
                 <SocialLinkCard
-                  href={INSTAGRAM_LINK}
+                  href={siteSettings.instagramLink}
                   icon={<InstagramIcon size={20} />}
                   title={t.socialInstagram}
                   subtitle={t.socialAction}
@@ -1621,11 +2302,11 @@ export default function Home() {
                 />
 
                 <SocialLinkCard
-                  href={TIKTOK_LINK}
+                  href={siteSettings.tiktokLink}
                   icon={<TikTokIcon size={20} />}
                   title={t.socialTikTok}
                   subtitle={t.socialAction}
-                  accentColor={isDark ? '#ffffff' : '#111111'}
+                  accentColor={isDark ? "#ffffff" : "#111111"}
                   colors={colors}
                 />
               </div>
@@ -1636,51 +2317,30 @@ export default function Home() {
 
       <footer
         style={{
-          marginTop: 0,
           borderTop: `1px solid ${colors.border}`,
           background: `linear-gradient(180deg, ${colors.footerTop} 0%, ${colors.footerBottom} 100%)`,
-          position: 'relative',
-          overflow: 'hidden',
+          position: "relative",
+          overflow: "hidden",
         }}
       >
         <div
           style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'radial-gradient(circle at center, rgba(212,166,63,0.10), transparent 60%)',
-            pointerEvents: 'none',
-          }}
-        />
-
-        <div
-          style={{
             maxWidth: 1200,
-            margin: '0 auto',
-            padding: '54px 20px 26px',
-            position: 'relative',
-            zIndex: 1,
+            margin: "0 auto",
+            padding: isMobile ? "40px 14px 22px" : "54px 20px 26px",
           }}
         >
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))",
               gap: 28,
-              marginBottom: 34,
+              marginBottom: 28,
             }}
           >
             <div style={{ textAlign: rootAlign }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  justifyContent: 'flex-start',
-                  marginBottom: 16,
-                }}
-              >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 <BrandLogo colors={colors} size={50} />
-
                 <div>
                   <div style={{ color: colors.gold, fontWeight: 900, fontSize: 20 }}>{t.brand}</div>
                   <div style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
@@ -1689,25 +2349,25 @@ export default function Home() {
                 </div>
               </div>
 
-              <p style={{ color: colors.textSoft, lineHeight: 1.9, margin: '0 0 18px', fontSize: 14 }}>
+              <p style={{ color: colors.textSoft, lineHeight: 1.9, margin: "0 0 18px", fontSize: 14 }}>
                 {t.footerText}
               </p>
 
               <a
-                href={WHATSAPP_LINK}
+                href={whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
+                  display: "inline-flex",
+                  alignItems: "center",
                   gap: 8,
                   background: colors.heroButton,
-                  color: '#111',
-                  textDecoration: 'none',
-                  padding: '12px 18px',
+                  color: "#111",
+                  textDecoration: "none",
+                  padding: "12px 18px",
                   borderRadius: 14,
                   fontWeight: 900,
-                  boxShadow: '0 10px 40px rgba(212,166,63,0.30)',
+                  boxShadow: "0 12px 28px rgba(212,166,63,0.20)",
                 }}
               >
                 <MessageCircle size={16} />
@@ -1716,58 +2376,69 @@ export default function Home() {
             </div>
 
             <div style={{ textAlign: rootAlign }}>
-              <h3 style={{ margin: '0 0 16px', color: colors.gold, fontSize: 17 }}>{t.footerQuick}</h3>
-              <div style={{ display: 'grid', gap: 12 }}>
-                <NavLink to={HOME_PATH} style={{ color: colors.textSoft, textDecoration: 'none', fontSize: 14 }}>
+              <h3 style={{ margin: "0 0 16px", color: colors.gold, fontSize: 17 }}>{t.footerQuick}</h3>
+              <div style={{ display: "grid", gap: 12 }}>
+                <NavLink to={HOME_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.home}
                 </NavLink>
-                <NavLink to={ABOUT_PATH} style={{ color: colors.textSoft, textDecoration: 'none', fontSize: 14 }}>
+                <NavLink to={ABOUT_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.navAbout}
                 </NavLink>
-                <NavLink to={SERVICES_PATH} style={{ color: colors.textSoft, textDecoration: 'none', fontSize: 14 }}>
-                  {t.navServices}
-                </NavLink>
-                <NavLink to={CLASSES_PATH} style={{ color: colors.textSoft, textDecoration: 'none', fontSize: 14 }}>
+                <NavLink to={CLASSES_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.navClasses}
                 </NavLink>
-                <NavLink to={BOOKING_PATH} style={{ color: colors.textSoft, textDecoration: 'none', fontSize: 14 }}>
+                <NavLink
+                  to={TRANSFORMATIONS_PATH}
+                  style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}
+                >
+                  {t.navTransformations}
+                </NavLink>
+                <NavLink to={BOOKING_PATH} style={{ color: colors.textSoft, textDecoration: "none", fontSize: 14 }}>
                   {t.navBooking}
                 </NavLink>
-                <a href="#results" style={{ color: colors.textSoft, textDecoration: 'none', fontSize: 14 }}>
-                  {t.navGallery}
-                </a>
               </div>
             </div>
 
             <div style={{ textAlign: rootAlign }}>
-              <h3 style={{ margin: '0 0 16px', color: colors.gold, fontSize: 17 }}>{t.footerServices}</h3>
-              <div style={{ display: 'grid', gap: 12, color: colors.textSoft, fontSize: 14 }}>
-                <span>{isAr ? 'التدريب الأونلاين' : 'Online Coaching'}</span>
-                <span>{isAr ? 'برامج التغذية' : 'Nutrition Programs'}</span>
-                <span>{isAr ? 'تحضير البطولات' : 'Competition Prep'}</span>
-                <span>{isAr ? 'الاستشفاء والحجامة' : 'Recovery & Hijama'}</span>
-                <span>{isAr ? 'الكورسات والورش' : 'Courses & Workshops'}</span>
+              <h3 style={{ margin: "0 0 16px", color: colors.gold, fontSize: 17 }}>{t.footerServices}</h3>
+              <div style={{ display: "grid", gap: 12, color: colors.textSoft, fontSize: 14 }}>
+                <span>{isAr ? "الكلاسات" : isEn ? "Classes" : "Kurse"}</span>
+                <span>{isAr ? "التدريب الأونلاين" : isEn ? "Online Coaching" : "Online-Coaching"}</span>
+                <span>
+                  {isAr
+                    ? "جلسات الاستشفاء والأداء"
+                    : isEn
+                    ? "Recovery & Performance"
+                    : "Regeneration & Performance"}
+                </span>
+                <span>
+                  {isAr
+                    ? "الكورسات والبوتكامبات"
+                    : isEn
+                    ? "Courses & Bootcamps"
+                    : "Kurse & Bootcamps"}
+                </span>
               </div>
             </div>
 
             <div style={{ textAlign: rootAlign }}>
-              <h3 style={{ margin: '0 0 16px', color: colors.gold, fontSize: 17 }}>{t.footerContact}</h3>
-              <div style={{ display: 'grid', gap: 14, color: colors.textSoft, fontSize: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h3 style={{ margin: "0 0 16px", color: colors.gold, fontSize: 17 }}>{t.footerContact}</h3>
+              <div style={{ display: "grid", gap: 14, color: colors.textSoft, fontSize: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <MapPin size={16} color={colors.gold} />
                   <span>{t.footerLocation}</span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <Clock3 size={16} color={colors.gold} />
                   <span>{t.footerHours}</span>
                 </div>
 
                 <div style={{ marginTop: 4 }}>
                   <div style={{ color: colors.gold, fontWeight: 800, marginBottom: 10 }}>{t.footerFollow}</div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <a
-                      href={INSTAGRAM_LINK}
+                      href={siteSettings.instagramLink || "#"}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1775,11 +2446,11 @@ export default function Home() {
                         height: 42,
                         borderRadius: 12,
                         border: `1px solid ${colors.border}`,
-                        color: '#E1306C',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textDecoration: 'none',
+                        color: "#E1306C",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textDecoration: "none",
                         background: colors.bgSoft,
                       }}
                     >
@@ -1787,7 +2458,7 @@ export default function Home() {
                     </a>
 
                     <a
-                      href={FACEBOOK_LINK}
+                      href={siteSettings.facebookLink || "#"}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1795,11 +2466,11 @@ export default function Home() {
                         height: 42,
                         borderRadius: 12,
                         border: `1px solid ${colors.border}`,
-                        color: '#1877F2',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textDecoration: 'none',
+                        color: "#1877F2",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textDecoration: "none",
                         background: colors.bgSoft,
                       }}
                     >
@@ -1807,7 +2478,7 @@ export default function Home() {
                     </a>
 
                     <a
-                      href={TIKTOK_LINK}
+                      href={siteSettings.tiktokLink || "#"}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1815,11 +2486,11 @@ export default function Home() {
                         height: 42,
                         borderRadius: 12,
                         border: `1px solid ${colors.border}`,
-                        color: isDark ? '#ffffff' : '#111111',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textDecoration: 'none',
+                        color: isDark ? "#ffffff" : "#111111",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textDecoration: "none",
                         background: colors.bgSoft,
                       }}
                     >
@@ -1827,7 +2498,7 @@ export default function Home() {
                     </a>
 
                     <a
-                      href={WHATSAPP_LINK}
+                      href={whatsappLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1835,11 +2506,11 @@ export default function Home() {
                         height: 42,
                         borderRadius: 12,
                         border: `1px solid ${colors.border}`,
-                        color: '#25D366',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textDecoration: 'none',
+                        color: "#25D366",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textDecoration: "none",
                         background: colors.bgSoft,
                       }}
                     >
@@ -1855,198 +2526,77 @@ export default function Home() {
             style={{
               borderTop: `1px solid ${colors.border}`,
               paddingTop: 18,
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 16,
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              textAlign: 'center',
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: isMobile ? "stretch" : "center",
+              flexDirection: isMobile ? "column" : "row",
+              gap: 14,
+              color: colors.textMuted,
+              fontSize: 13,
             }}
           >
-            <div style={{ color: colors.textMuted, fontSize: 13, lineHeight: 1.9 }}>
-              {t.footerRights}
-              <br />
-              <span style={{ fontWeight: 700 }}>{t.developer}</span>
-              <br />
+            <span>{t.rights}</span>
+
+            <div
+              style={{
+                width: isMobile ? "100%" : "auto",
+                display: "flex",
+                flexDirection: isMobile ? "column" : "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+                padding: isMobile ? "14px" : "12px 16px",
+                borderRadius: 20,
+                background: `linear-gradient(135deg, ${colors.goldSoft}, rgba(255,255,255,0.02))`,
+                border: `1px solid ${colors.border}`,
+                boxShadow: colors.glow,
+              }}
+            >
+              <div
+                style={{
+                  textAlign: isMobile ? "center" : rootAlign,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 700 }}>
+                  {t.developerCredit}
+                </span>
+                <span style={{ color: colors.gold, fontWeight: 900, fontSize: 15 }}>
+                  {siteSettings.developerName || defaultSiteSettings.developerName}
+                </span>
+                <span style={{ color: colors.textMuted, fontSize: 12 }}>{t.developerRole}</span>
+              </div>
+
               <a
-                href={DEVELOPER_WHATSAPP}
+                href={developerWhatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  color: '#25D366',
-                  textDecoration: 'none',
-                  fontWeight: 800,
+                  textDecoration: "none",
+                  color: "#111",
+                  fontWeight: 900,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "11px 16px",
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, #25D366, #53df87)",
+                  boxShadow: "0 10px 24px rgba(37,211,102,0.22)",
+                  minWidth: isMobile ? "100%" : "auto",
                 }}
               >
-                {t.developerContact}
+                <MessageCircle size={16} />
+                {t.devWhatsapp}
               </a>
             </div>
+
+            <span>{t.modernDesign}</span>
           </div>
         </div>
       </footer>
-
-      {isLightboxOpen && activeImage && (
-        <div
-          onClick={closeLightbox}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 300,
-            background: colors.modalOverlay,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-          }}
-        >
-          <button
-            type="button"
-            aria-label={t.close}
-            onClick={(e) => {
-              e.stopPropagation();
-              closeLightbox();
-            }}
-            style={{
-              ...lightboxButtonStyle,
-              position: 'absolute',
-              top: 24,
-              [isAr ? 'left' : 'right']: 24,
-            }}
-          >
-            <X size={22} />
-          </button>
-
-          <button
-            type="button"
-            aria-label={t.prev}
-            onClick={(e) => {
-              e.stopPropagation();
-              showPrevImage();
-            }}
-            style={{
-              ...lightboxButtonStyle,
-              position: 'absolute',
-              left: 24,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }}
-          >
-            <ArrowLeft size={22} />
-          </button>
-
-          <button
-            type="button"
-            aria-label={t.next}
-            onClick={(e) => {
-              e.stopPropagation();
-              showNextImage();
-            }}
-            style={{
-              ...lightboxButtonStyle,
-              position: 'absolute',
-              right: 24,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }}
-          >
-            <ArrowRight size={22} />
-          </button>
-
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: 'min(1100px, 92vw)',
-              maxHeight: '90vh',
-              width: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 16,
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                borderRadius: 28,
-                overflow: 'hidden',
-                border: `1px solid rgba(255,255,255,0.12)`,
-                boxShadow: '0 25px 80px rgba(0,0,0,0.45)',
-                background: '#0d1117',
-              }}
-            >
-              <img
-                src={activeImage}
-                alt={`Transformation ${activeImageIndex! + 1}`}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  maxHeight: '72vh',
-                  objectFit: 'contain',
-                  background: '#090b10',
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 10,
-                overflowX: 'auto',
-                maxWidth: '100%',
-                padding: '6px 4px',
-              }}
-            >
-              {galleryImages.map((thumb, index) => {
-                const isActive = index === activeImageIndex;
-                return (
-                  <button
-                    key={thumb}
-                    type="button"
-                    onClick={() => setActiveImageIndex(index)}
-                    style={{
-                      border: isActive ? `2px solid ${colors.gold}` : '1px solid rgba(255,255,255,0.14)',
-                      background: 'transparent',
-                      padding: 0,
-                      borderRadius: 16,
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      width: 86,
-                      height: 86,
-                      flex: '0 0 auto',
-                      boxShadow: isActive ? `0 0 0 3px rgba(212,166,63,0.18)` : 'none',
-                      opacity: isActive ? 1 : 0.72,
-                      transition: '0.22s ease',
-                    }}
-                  >
-                    <img
-                      src={thumb}
-                      alt={`Thumbnail ${index + 1}`}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            <div
-              style={{
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: 14,
-                textAlign: 'center',
-                letterSpacing: 0.3,
-              }}
-            >
-              {t.resultLabel} {activeImageIndex! + 1} • {activeImageIndex! + 1} / {galleryImages.length}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
