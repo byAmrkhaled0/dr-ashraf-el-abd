@@ -9,24 +9,23 @@
 
     "jsx": "react-jsx",
 
-    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
     "skipLibCheck": true,
 
-    /* تحسين الجودة */
     "strict": true,
     "noImplicitAny": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
-    /* Alias */
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+
+    "types": ["vite/client"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
